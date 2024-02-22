@@ -58,9 +58,9 @@ SystemConfig::SystemConfig(
 }
 
 static void getLockFileFlagsAndType(bool readOnly, bool createNew, int& flags, FileLockType& lock) {
-    flags = readOnly ? O_RDONLY : O_RDWR;
+    flags = readOnly ? FileFlags::FILE_FLAGS_READ : FileFlags::FILE_FLAGS_WRITE;
     if (createNew && !readOnly) {
-        flags |= O_CREAT;
+        flags |= FileFlags::FILE_FLAGS_FILE_CREATE_NEW;
     }
     lock = readOnly ? FileLockType::READ_LOCK : FileLockType::WRITE_LOCK;
 }
