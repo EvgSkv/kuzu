@@ -153,7 +153,8 @@ std::unique_ptr<PreparedStatement> Connection::prepareNoLock(
         preparedStatement->statementResult =
             std::make_unique<BoundStatementResult>(boundStatement->getStatementResult()->copy());
         // planning
-        auto planner = Planner(database->catalog.get(), database->storageManager.get());
+        auto planner =
+            Planner(database->catalog.get(), database->storageManager.get(), clientContext.get());
         std::vector<std::unique_ptr<LogicalPlan>> plans;
         if (enumerateAllPlans) {
             plans = planner.getAllPlans(*boundStatement);

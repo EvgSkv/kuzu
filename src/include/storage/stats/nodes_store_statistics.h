@@ -26,9 +26,14 @@ public:
         readFromFile(dbFileType);
     }
 
+    //    inline NodeTableStatsAndDeletedIDs* getNodeStatisticsAndDeletedIDs(
+    //        common::table_id_t tableID) const {
+    //        return getNodeTableStats(transaction::TransactionType::READ_ONLY, tableID);
+    //    }
+
     inline NodeTableStatsAndDeletedIDs* getNodeStatisticsAndDeletedIDs(
-        common::table_id_t tableID) const {
-        return getNodeTableStats(transaction::TransactionType::READ_ONLY, tableID);
+        transaction::Transaction* transaction, common::table_id_t tableID) const {
+        return getNodeTableStats(transaction->getType(), tableID);
     }
 
     static inline void saveInitialNodesStatisticsAndDeletedIDsToFile(

@@ -33,11 +33,12 @@ static std::unique_ptr<ScanRelTableInfo> getRelTableScanInfo(TableCatalogEntry* 
 
 static std::unique_ptr<RelTableCollectionScanner> populateRelTableCollectionScanner(
     table_id_t boundNodeTableID, const RelExpression& rel, ExtendDirection extendDirection,
-    const expression_vector& properties, StorageManager& storageManager, const Catalog& catalog) {
+    const expression_vector& properties, StorageManager& storageManager, const Catalog& catalog,
+    const main::ClientContext& clientContext) {
     std::vector<std::unique_ptr<ScanRelTableInfo>> scanInfos;
     for (auto relTableID : rel.getTableIDs()) {
         auto relTableEntry = ku_dynamic_cast<TableCatalogEntry*, RelTableCatalogEntry*>(
-            catalog.getTableCatalogEntry(&transaction::DUMMY_READ_TRANSACTION, relTableID));
+            catalog.getTableCatalogEntry(clientContext.getTx(), relTableID));
         switch (extendDirection) {
         case ExtendDirection::FWD: {
             if (relTableEntry->getBoundTableID(RelDataDirection::FWD) == boundNodeTableID) {
@@ -102,8 +103,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(LogicalOperator* logical
     if (!rel->isMultiLabeled() && !boundNode->isMultiLabeled() &&
         extendDirection != ExtendDirection::BOTH) {
         auto relTableEntry = ku_dynamic_cast<TableCatalogEntry*, RelTableCatalogEntry*>(
-            catalog->getTableCatalogEntry(
-                &transaction::DUMMY_READ_TRANSACTION, rel->getSingleTableID()));
+            catalog->getTableCatalogEntry(clientContext->getTx(), rel->getSingleTableID()));
         auto relDataDirection = ExtendDirectionUtils::getRelDataDirection(extendDirection);
         auto scanInfo = getRelTableScanInfo(
             relTableEntry, relDataDirection, storageManager, extend->getProperties());
@@ -120,7 +120,7 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapExtend(LogicalOperator* logical
         std::unordered_map<table_id_t, std::unique_ptr<RelTableCollectionScanner>> scanners;
         for (auto boundNodeTableID : boundNode->getTableIDs()) {
             auto scanner = populateRelTableCollectionScanner(boundNodeTableID, *rel,
-                extendDirection, extend->getProperties(), storageManager, *catalog);
+                extendDirection, extend->getProperties(), storageManager, *catalog, *clientContext);
             if (scanner != nullptr) {
                 scanners.insert({boundNodeTableID, std::move(scanner)});
             }

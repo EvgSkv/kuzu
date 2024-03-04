@@ -113,8 +113,9 @@ private:
     // skipCheckpointForTestingRecovery is used to simulate a failure before checkpointing in tests.
     void commit(transaction::Transaction* transaction, bool skipCheckpointForTestingRecovery);
     void rollback(transaction::Transaction* transaction, bool skipCheckpointForTestingRecovery);
-    void checkpointAndClearWAL(storage::WALReplayMode walReplayMode);
-    void rollbackAndClearWAL();
+    void checkpointAndClearWAL(
+        storage::WALReplayMode walReplayMode, transaction::Transaction* transaction);
+    void rollbackAndClearWAL(transaction::Transaction* transaction);
     void recoverIfNecessary();
 
 private:

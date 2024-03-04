@@ -32,7 +32,8 @@ struct LogicalSetPropertyInfo;
 
 class Planner {
 public:
-    Planner(catalog::Catalog* catalog, storage::StorageManager* storageManager);
+    Planner(catalog::Catalog* catalog, storage::StorageManager* storageManager,
+        main::ClientContext* clientContext);
     DELETE_COPY_AND_MOVE(Planner);
 
     std::unique_ptr<LogicalPlan> getBestPlan(const binder::BoundStatement& statement);
@@ -269,6 +270,7 @@ private:
 
 private:
     catalog::Catalog* catalog;
+    main::ClientContext* clientContext;
     storage::StorageManager* storageManager;
     binder::expression_vector propertiesToScan;
     CardinalityEstimator cardinalityEstimator;

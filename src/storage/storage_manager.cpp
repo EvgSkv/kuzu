@@ -127,7 +127,8 @@ void StorageManager::dropTable(table_id_t tableID) {
         KU_UNREACHABLE;
     }
     }
-    tables.erase(tableID);
+    //    tables.erase(tableID);
+    deleteTables.insert(tableID);
 }
 
 void StorageManager::prepareCommit(transaction::Transaction* transaction) {
@@ -171,6 +172,10 @@ void StorageManager::rollbackInMemory() {
     for (auto tableID : wal->getUpdatedTables()) {
         KU_ASSERT(tables.contains(tableID));
         tables.at(tableID)->rollbackInMemory();
+        if (deleteTables.contains(tableID)) {
+            deleteTables.erase(tableID);
+            tables.erase(tableID);
+        }
     }
 }
 

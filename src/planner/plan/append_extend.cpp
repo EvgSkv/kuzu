@@ -22,7 +22,8 @@ namespace kuzu {
 namespace planner {
 
 static bool extendHasAtMostOneNbrGuarantee(RelExpression& rel, NodeExpression& boundNode,
-    ExtendDirection direction, const catalog::Catalog& catalog) {
+    ExtendDirection direction, const catalog::Catalog& catalog,
+    const main::ClientContext& clientContext) {
     if (boundNode.isMultiLabeled()) {
         return false;
     }
@@ -34,16 +35,17 @@ static bool extendHasAtMostOneNbrGuarantee(RelExpression& rel, NodeExpression& b
     }
     auto relDirection = ExtendDirectionUtils::getRelDataDirection(direction);
     auto relTableEntry = ku_dynamic_cast<TableCatalogEntry*, RelTableCatalogEntry*>(
-        catalog.getTableCatalogEntry(&DUMMY_READ_TRANSACTION, rel.getSingleTableID()));
+        catalog.getTableCatalogEntry(clientContext.getTx(), rel.getSingleTableID()));
     return relTableEntry->isSingleMultiplicity(relDirection);
 }
 
-static std::unordered_set<table_id_t> getBoundNodeTableIDSet(
-    const RelExpression& rel, ExtendDirection extendDirection, const catalog::Catalog& catalog) {
+static std::unordered_set<table_id_t> getBoundNodeTableIDSet(const RelExpression& rel,
+    ExtendDirection extendDirection, const catalog::Catalog& catalog,
+    const main::ClientContext& clientContext) {
     std::unordered_set<table_id_t> result;
     for (auto tableID : rel.getTableIDs()) {
         auto relTableEntry = ku_dynamic_cast<TableCatalogEntry*, RelTableCatalogEntry*>(
-            catalog.getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID));
+            catalog.getTableCatalogEntry(clientContext.getTx(), tableID));
         switch (extendDirection) {
         case ExtendDirection::FWD: {
             result.insert(relTableEntry->getBoundTableID(RelDataDirection::FWD));
@@ -62,12 +64,13 @@ static std::unordered_set<table_id_t> getBoundNodeTableIDSet(
     return result;
 }
 
-static std::unordered_set<table_id_t> getNbrNodeTableIDSet(
-    const RelExpression& rel, ExtendDirection extendDirection, const catalog::Catalog& catalog) {
+static std::unordered_set<table_id_t> getNbrNodeTableIDSet(const RelExpression& rel,
+    ExtendDirection extendDirection, const catalog::Catalog& catalog,
+    const main::ClientContext& clientContext) {
     std::unordered_set<table_id_t> result;
     for (auto tableID : rel.getTableIDs()) {
         auto relTableEntry = ku_dynamic_cast<TableCatalogEntry*, RelTableCatalogEntry*>(
-            catalog.getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID));
+            catalog.getTableCatalogEntry(clientContext.getTx(), tableID));
         switch (extendDirection) {
         case ExtendDirection::FWD: {
             result.insert(relTableEntry->getNbrTableID(RelDataDirection::FWD));
@@ -101,12 +104,13 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
     ExtendDirection direction, const expression_vector& properties, LogicalPlan& plan) {
     // Filter bound node label if we know some incoming nodes won't have any outgoing rel. This
     // cannot be done at binding time because the pruning is affected by extend direction.
-    auto boundNodeTableIDSet = getBoundNodeTableIDSet(*rel, direction, *catalog);
+    auto boundNodeTableIDSet = getBoundNodeTableIDSet(*rel, direction, *catalog, *clientContext);
     if (boundNode->getNumTableIDs() > boundNodeTableIDSet.size()) {
         appendNodeLabelFilter(boundNode->getInternalID(), boundNodeTableIDSet, plan);
     }
     // Check for each bound node, can we extend to more than 1 nbr node.
-    auto hasAtMostOneNbr = extendHasAtMostOneNbrGuarantee(*rel, *boundNode, direction, *catalog);
+    auto hasAtMostOneNbr =
+        extendHasAtMostOneNbrGuarantee(*rel, *boundNode, direction, *catalog, *clientContext);
     auto properties_ = properties;
     auto iri = getIRIProperty(properties);
     if (iri != nullptr) {
@@ -124,12 +128,13 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
     // Update cost & cardinality. Note that extend does not change cardinality.
     plan.setCost(CostModel::computeExtendCost(plan));
     if (!hasAtMostOneNbr) {
-        auto extensionRate = cardinalityEstimator.getExtensionRate(*rel, *boundNode);
+        auto extensionRate =
+            cardinalityEstimator.getExtensionRate(*rel, *boundNode, clientContext->getTx());
         auto group = extend->getSchema()->getGroup(nbrNode->getInternalID());
         group->setMultiplier(extensionRate);
     }
     plan.setLastOperator(std::move(extend));
-    auto nbrNodeTableIDSet = getNbrNodeTableIDSet(*rel, direction, *catalog);
+    auto nbrNodeTableIDSet = getNbrNodeTableIDSet(*rel, direction, *catalog, *clientContext);
     if (nbrNodeTableIDSet.size() > nbrNode->getNumTableIDs()) {
         appendNodeLabelFilter(nbrNode->getInternalID(), nbrNode->getTableIDsSet(), plan);
     }
@@ -138,7 +143,8 @@ void Planner::appendNonRecursiveExtend(const std::shared_ptr<NodeExpression>& bo
         auto rdfInfo = rel->getRdfPredicateInfo();
         // Append hash join for remaining properties
         auto tmpPlan = std::make_unique<LogicalPlan>();
-        cardinalityEstimator.addNodeIDDom(*rdfInfo->predicateID, rdfInfo->resourceTableIDs);
+        cardinalityEstimator.addNodeIDDom(
+            *rdfInfo->predicateID, rdfInfo->resourceTableIDs, clientContext->getTx());
         appendScanInternalID(rdfInfo->predicateID, rdfInfo->resourceTableIDs, *tmpPlan);
         appendScanNodeProperties(
             rdfInfo->predicateID, rdfInfo->resourceTableIDs, expression_vector{iri}, *tmpPlan);
@@ -196,10 +202,12 @@ void Planner::appendRecursiveExtend(const std::shared_ptr<NodeExpression>& bound
     }
     plan.setLastOperator(std::move(pathPropertyProbe));
     // Update cost
-    auto extensionRate = cardinalityEstimator.getExtensionRate(*rel, *boundNode);
+    auto extensionRate =
+        cardinalityEstimator.getExtensionRate(*rel, *boundNode, clientContext->getTx());
     plan.setCost(CostModel::computeRecursiveExtendCost(rel->getUpperBound(), extensionRate, plan));
     // Update cardinality
-    auto hasAtMostOneNbr = extendHasAtMostOneNbrGuarantee(*rel, *boundNode, direction, *catalog);
+    auto hasAtMostOneNbr =
+        extendHasAtMostOneNbrGuarantee(*rel, *boundNode, direction, *catalog, *clientContext);
     if (!hasAtMostOneNbr) {
         auto group = plan.getSchema()->getGroup(nbrNode->getInternalID());
         group->setMultiplier(extensionRate);

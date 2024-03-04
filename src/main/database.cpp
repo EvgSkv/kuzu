@@ -203,7 +203,7 @@ void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRec
         transactionManager->allowReceivingNewTransactions();
         return;
     }
-    checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT);
+    checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT, transaction);
     transactionManager->manuallyClearActiveWriteTransaction(transaction);
     transactionManager->allowReceivingNewTransactions();
 }
@@ -221,22 +221,22 @@ void Database::rollback(
         wal->flushAllPages();
         return;
     }
-    rollbackAndClearWAL();
+    rollbackAndClearWAL(transaction);
     transactionManager->manuallyClearActiveWriteTransaction(transaction);
 }
 
-void Database::checkpointAndClearWAL(WALReplayMode replayMode) {
+void Database::checkpointAndClearWAL(WALReplayMode replayMode, Transaction* transaction) {
     KU_ASSERT(replayMode == WALReplayMode::COMMIT_CHECKPOINT ||
               replayMode == WALReplayMode::RECOVERY_CHECKPOINT);
-    auto walReplayer = std::make_unique<WALReplayer>(
-        wal.get(), storageManager.get(), bufferManager.get(), catalog.get(), replayMode, vfs.get());
+    auto walReplayer = std::make_unique<WALReplayer>(wal.get(), storageManager.get(),
+        bufferManager.get(), catalog.get(), replayMode, vfs.get(), transaction);
     walReplayer->replay();
     wal->clearWAL();
 }
 
-void Database::rollbackAndClearWAL() {
+void Database::rollbackAndClearWAL(transaction::Transaction* transaction) {
     auto walReplayer = std::make_unique<WALReplayer>(wal.get(), storageManager.get(),
-        bufferManager.get(), catalog.get(), WALReplayMode::ROLLBACK, vfs.get());
+        bufferManager.get(), catalog.get(), WALReplayMode::ROLLBACK, vfs.get(), transaction);
     walReplayer->replay();
     wal->clearWAL();
 }
@@ -245,7 +245,7 @@ void Database::recoverIfNecessary() {
     if (!wal->isEmptyWAL()) {
         logger->info("Starting up StorageManager and found a non-empty WAL with a committed "
                      "transaction. Replaying to checkpointInMemory.");
-        checkpointAndClearWAL(WALReplayMode::RECOVERY_CHECKPOINT);
+        checkpointAndClearWAL(WALReplayMode::RECOVERY_CHECKPOINT, &DUMMY_READ_TRANSACTION);
     }
 }
 

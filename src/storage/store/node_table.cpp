@@ -135,7 +135,9 @@ void NodeTable::prepareCommit(Transaction* transaction, LocalTable* localTable) 
     if (pkIndex) {
         pkIndex->prepareCommit();
     }
-    tableData->prepareLocalTableToCommit(transaction, localTable->getLocalTableData(0));
+    if (localTable) {
+        tableData->prepareLocalTableToCommit(transaction, localTable->getLocalTableData(0));
+    }
     wal->addToUpdatedTables(tableID);
 }
 

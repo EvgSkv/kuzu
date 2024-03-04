@@ -13,15 +13,15 @@ namespace kuzu {
 namespace processor {
 
 static std::unique_ptr<NodeDeleteExecutor> getNodeDeleteExecutor(Catalog* catalog,
-    StorageManager& storageManager, LogicalDeleteNodeInfo* info, const Schema& inSchema) {
+    StorageManager& storageManager, LogicalDeleteNodeInfo* info, const Schema& inSchema,
+    main::ClientContext* clientContext) {
     auto nodeIDPos = DataPos(inSchema.getExpressionPos(*info->node->getInternalID()));
     if (info->node->isMultiLabeled()) {
         std::unordered_map<table_id_t, NodeTable*> tableIDToTableMap;
         std::unordered_map<table_id_t, std::unordered_set<RelTable*>> tableIDToFwdRelTablesMap;
         std::unordered_map<table_id_t, std::unordered_set<RelTable*>> tableIDToBwdRelTablesMap;
         for (auto tableID : info->node->getTableIDs()) {
-            auto tableEntry =
-                catalog->getTableCatalogEntry(&transaction::DUMMY_READ_TRANSACTION, tableID);
+            auto tableEntry = catalog->getTableCatalogEntry(clientContext->getTx(), tableID);
             auto nodeTableEntry =
                 ku_dynamic_cast<TableCatalogEntry*, NodeTableCatalogEntry*>(tableEntry);
             auto table = storageManager.getNodeTable(tableID);
@@ -44,8 +44,8 @@ static std::unique_ptr<NodeDeleteExecutor> getNodeDeleteExecutor(Catalog* catalo
             info->deleteType, nodeIDPos);
     } else {
         auto table = storageManager.getNodeTable(info->node->getSingleTableID());
-        auto tableEntry = catalog->getTableCatalogEntry(
-            &transaction::DUMMY_READ_TRANSACTION, info->node->getSingleTableID());
+        auto tableEntry =
+            catalog->getTableCatalogEntry(clientContext->getTx(), info->node->getSingleTableID());
         auto nodeTableEntry =
             ku_dynamic_cast<TableCatalogEntry*, NodeTableCatalogEntry*>(tableEntry);
         auto fwdRelTableIDs = nodeTableEntry->getFwdRelTableIDSet();
@@ -69,7 +69,8 @@ std::unique_ptr<PhysicalOperator> PlanMapper::mapDeleteNode(LogicalOperator* log
     auto prevOperator = mapOperator(logicalOperator->getChild(0).get());
     std::vector<std::unique_ptr<NodeDeleteExecutor>> executors;
     for (auto deleteInfo : logicalDeleteNode->getInfos()) {
-        executors.push_back(getNodeDeleteExecutor(catalog, storageManager, deleteInfo, *inSchema));
+        executors.push_back(
+            getNodeDeleteExecutor(catalog, storageManager, deleteInfo, *inSchema, clientContext));
     }
     return std::make_unique<DeleteNode>(std::move(executors), std::move(prevOperator),
         getOperatorID(), logicalDeleteNode->getExpressionsForPrinting());

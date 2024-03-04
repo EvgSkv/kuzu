@@ -8,7 +8,9 @@ namespace binder {
 
 class QueryGraphLabelAnalyzer {
 public:
-    explicit QueryGraphLabelAnalyzer(const catalog::Catalog& catalog) : catalog{catalog} {}
+    explicit QueryGraphLabelAnalyzer(
+        const catalog::Catalog& catalog, const main::ClientContext& clientContext)
+        : catalog{catalog}, clientContext{clientContext} {}
 
     void pruneLabel(const QueryGraph& graph);
 
@@ -18,6 +20,7 @@ private:
 
 private:
     const catalog::Catalog& catalog;
+    const main::ClientContext& clientContext;
 };
 
 } // namespace binder

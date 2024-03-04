@@ -474,6 +474,7 @@ void Column::append(ColumnChunk* columnChunk, uint64_t nodeGroupIdx) {
     KU_ASSERT(sanityCheckForWrites(metadata, dataType));
     metadataDA->resize(nodeGroupIdx + 1);
     metadataDA->update(nodeGroupIdx, metadata);
+    auto testhere = metadataDA->get(nodeGroupIdx, TransactionType::WRITE);
     if (nullColumn) {
         // Null column chunk.
         nullColumn->append(columnChunk->getNullChunk(), nodeGroupIdx);
@@ -816,6 +817,7 @@ void Column::applyLocalChunkToColumn(node_group_idx_t nodeGroupIdx,
 }
 
 void Column::checkpointInMemory() {
+    // TODO(Jimmin):
     metadataDA->checkpointInMemoryIfNecessary();
     if (nullColumn) {
         nullColumn->checkpointInMemory();

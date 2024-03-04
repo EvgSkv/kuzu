@@ -19,10 +19,11 @@ namespace storage {
 // ROLLBACK:            isCheckpoint = false, isRecovering = false
 // RECOVERY_CHECKPOINT: isCheckpoint = true,  isRecovering = true
 WALReplayer::WALReplayer(WAL* wal, StorageManager* storageManager, BufferManager* bufferManager,
-    Catalog* catalog, WALReplayMode replayMode, common::VirtualFileSystem* vfs)
+    Catalog* catalog, WALReplayMode replayMode, common::VirtualFileSystem* vfs,
+    transaction::Transaction* transaction)
     : isRecovering{replayMode == WALReplayMode::RECOVERY_CHECKPOINT},
       isCheckpoint{replayMode != WALReplayMode::ROLLBACK}, storageManager{storageManager},
-      bufferManager{bufferManager}, vfs{vfs}, wal{wal}, catalog{catalog} {
+      bufferManager{bufferManager}, vfs{vfs}, wal{wal}, catalog{catalog}, transaction{transaction} {
     init();
 }
 
@@ -230,10 +231,11 @@ void WALReplayer::replayCopyTableRecord(const kuzu::storage::WALRecord& walRecor
             // fileHandles are obsolete and should be reconstructed (e.g. since the numPages
             // have likely changed they need to reconstruct their page locks).
             if (walRecord.copyTableRecord.tableType == TableType::NODE) {
-                auto nodeTableEntry = ku_dynamic_cast<TableCatalogEntry*, NodeTableCatalogEntry*>(
-                    catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID));
-                storageManager->getNodeTable(tableID)->initializePKIndex(
-                    nodeTableEntry, false /* readOnly */, vfs);
+                //                auto nodeTableEntry = ku_dynamic_cast<TableCatalogEntry*,
+                //                NodeTableCatalogEntry*>(
+                //                    catalog->getTableCatalogEntry(transaction, tableID));
+                //                storageManager->getNodeTable(tableID)->initializePKIndex(
+                //                    nodeTableEntry, false /* readOnly */, vfs);
             }
         } else {
             // RECOVERY.
@@ -252,7 +254,7 @@ void WALReplayer::replayDropTableRecord(const kuzu::storage::WALRecord& walRecor
     if (isCheckpoint) {
         auto tableID = walRecord.dropTableRecord.tableID;
         if (!isRecovering) {
-            auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
+            auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
             switch (tableEntry->getTableType()) {
             case TableType::NODE: {
                 storageManager->dropTable(tableID);
@@ -276,8 +278,7 @@ void WALReplayer::replayDropTableRecord(const kuzu::storage::WALRecord& walRecor
                 return;
             }
             auto catalogForRecovery = getCatalogForRecovery(FileVersionType::ORIGINAL);
-            auto tableEntry =
-                catalogForRecovery->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
+            auto tableEntry = catalogForRecovery->getTableCatalogEntry(transaction, tableID);
             switch (tableEntry->getTableType()) {
             case TableType::NODE: {
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
@@ -302,7 +303,7 @@ void WALReplayer::replayDropPropertyRecord(const kuzu::storage::WALRecord& walRe
         auto tableID = walRecord.dropPropertyRecord.tableID;
         auto propertyID = walRecord.dropPropertyRecord.propertyID;
         if (!isRecovering) {
-            auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
+            auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
             switch (tableEntry->getTableType()) {
             case TableType::NODE: {
                 storageManager->getNodeTable(tableID)->dropColumn(
@@ -334,7 +335,7 @@ void WALReplayer::replayAddPropertyRecord(const kuzu::storage::WALRecord& walRec
     auto tableID = walRecord.addPropertyRecord.tableID;
     auto propertyID = walRecord.addPropertyRecord.propertyID;
     if (!isCheckpoint) {
-        auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
+        auto tableEntry = catalog->getTableCatalogEntry(transaction, tableID);
         switch (tableEntry->getTableType()) {
         case TableType::NODE: {
             storageManager->getNodeTable(tableID)->dropColumn(tableEntry->getColumnID(propertyID));

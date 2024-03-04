@@ -21,7 +21,8 @@ enum class WALReplayMode : uint8_t { COMMIT_CHECKPOINT, ROLLBACK, RECOVERY_CHECK
 class WALReplayer {
 public:
     WALReplayer(WAL* wal, StorageManager* storageManager, BufferManager* bufferManager,
-        catalog::Catalog* catalog, WALReplayMode replayMode, common::VirtualFileSystem* vfs);
+        catalog::Catalog* catalog, WALReplayMode replayMode, common::VirtualFileSystem* vfs,
+        transaction::Transaction* transaction);
 
     void replay();
 
@@ -58,6 +59,7 @@ private:
     std::unique_ptr<uint8_t[]> pageBuffer;
     WAL* wal;
     catalog::Catalog* catalog;
+    transaction::Transaction* transaction;
 };
 
 } // namespace storage

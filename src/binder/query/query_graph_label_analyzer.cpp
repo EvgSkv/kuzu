@@ -32,7 +32,7 @@ void QueryGraphLabelAnalyzer::pruneNode(const QueryGraph& graph, NodeExpression&
         std::unordered_set<std::string> candidateNamesSet;
         auto isSrcConnect = *queryRel->getSrcNode() == node;
         auto isDstConnect = *queryRel->getDstNode() == node;
-        auto tx = &DUMMY_READ_TRANSACTION;
+        auto tx = clientContext.getTx();
         if (queryRel->getDirectionType() == RelDirectionType::BOTH) {
             if (isSrcConnect || isDstConnect) {
                 for (auto relTableID : queryRel->getTableIDs()) {
@@ -109,7 +109,7 @@ void QueryGraphLabelAnalyzer::pruneRel(RelExpression& rel) {
         }
         for (auto& relTableID : rel.getTableIDs()) {
             auto relTableSchema = ku_dynamic_cast<CatalogEntry*, RelTableCatalogEntry*>(
-                catalog.getTableCatalogEntry(&DUMMY_READ_TRANSACTION, relTableID));
+                catalog.getTableCatalogEntry(clientContext.getTx(), relTableID));
             auto srcTableID = relTableSchema->getSrcTableID();
             auto dstTableID = relTableSchema->getDstTableID();
             if (!boundTableIDSet.contains(srcTableID) || !boundTableIDSet.contains(dstTableID)) {
@@ -122,7 +122,7 @@ void QueryGraphLabelAnalyzer::pruneRel(RelExpression& rel) {
         auto dstTableIDSet = rel.getDstNode()->getTableIDsSet();
         for (auto& relTableID : rel.getTableIDs()) {
             auto relTableSchema = ku_dynamic_cast<CatalogEntry*, RelTableCatalogEntry*>(
-                catalog.getTableCatalogEntry(&DUMMY_READ_TRANSACTION, relTableID));
+                catalog.getTableCatalogEntry(clientContext.getTx(), relTableID));
             auto srcTableID = relTableSchema->getSrcTableID();
             auto dstTableID = relTableSchema->getDstTableID();
             if (!srcTableIDSet.contains(srcTableID) || !dstTableIDSet.contains(dstTableID)) {

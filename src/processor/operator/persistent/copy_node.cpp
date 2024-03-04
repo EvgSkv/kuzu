@@ -1,12 +1,13 @@
 #include "processor/operator/persistent/copy_node.h"
 
+#include <iostream>
+
 #include "common/exception/copy.h"
 #include "common/exception/message.h"
 #include "common/string_format.h"
 #include "common/types/types.h"
 #include "function/table/scan_functions.h"
 #include "processor/result/factorized_table.h"
-
 using namespace kuzu::catalog;
 using namespace kuzu::common;
 using namespace kuzu::storage;
@@ -70,7 +71,9 @@ void CopyNodeSharedState::finalize(ExecutionContext* context) {
 
 static bool isEmptyTable(NodeTable* nodeTable) {
     auto nodesStatistics = nodeTable->getNodeStatisticsAndDeletedIDs();
-    return nodesStatistics->getNodeStatisticsAndDeletedIDs(nodeTable->getTableID())
+    return nodesStatistics
+               ->getNodeStatisticsAndDeletedIDs(
+                   &transaction::DUMMY_WRITE_TRANSACTION, nodeTable->getTableID())
                ->getNumTuples() == 0;
 }
 
@@ -138,6 +141,7 @@ void CopyNode::executeInternal(ExecutionContext* context) {
 void CopyNode::writeAndResetNodeGroup(node_group_idx_t nodeGroupIdx,
     std::optional<IndexBuilder>& indexBuilder, column_id_t pkColumnID, NodeTable* table,
     NodeGroup* nodeGroup) {
+    // TODO(Jiamin): how to commit column chunk? does column chunk prepare commit?
     nodeGroup->finalize(nodeGroupIdx);
     if (indexBuilder) {
         auto nodeOffset = StorageUtils::getStartOffsetOfNodeGroup(nodeGroupIdx);
@@ -169,6 +173,15 @@ void CopyNode::finalize(ExecutionContext* context) {
         sharedState->numTuples, info->tableName.c_str());
     FactorizedTableUtils::appendStringToTable(
         sharedState->fTable.get(), outputMsg, context->clientContext->getMemoryManager());
+    auto localStorage = transaction->getLocalStorage();
+    auto tableID = sharedState->table->getTableID();
+    sharedState->table->prepareCommit(
+        context->clientContext->getTx(), localStorage->getLocalTable(tableID));
+    auto nodeTableEntry = context->clientContext->getCatalog()->getTableCatalogEntry(
+        context->clientContext->getTx(), sharedState->table->getTableID());
+    sharedState->table->initializePKIndex(
+        ku_dynamic_cast<TableCatalogEntry*, NodeTableCatalogEntry*>(nodeTableEntry), true,
+        context->clientContext->getVFSUnsafe());
 }
 
 void CopyNode::copyToNodeGroup() {

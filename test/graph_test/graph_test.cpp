@@ -29,7 +29,7 @@ void PrivateGraphTest::validateQueryBestPlanJoinOrder(
         Binder(*catalog, database->memoryManager.get(), database->storageManager.get(),
             database->vfs.get(), conn->clientContext.get(), database->extensionOptions.get())
             .bind(*parsedQuery);
-    auto planner = Planner(catalog, getStorageManager(*database));
+    auto planner = Planner(catalog, getStorageManager(*database),conn->clientContext.get());
     auto plan = planner.getBestPlan(*boundQuery);
     ASSERT_STREQ(LogicalPlanUtil::encodeJoin(*plan).c_str(), expectedJoinOrder.c_str());
 }

@@ -1,0 +1,107 @@
+-GROUP CreateDeleteInt64NodeTrxTest
+-DATASET CSV empty
+--
+#
+-CASE createCopyCommit
+-STATEMENT BEGIN TRANSACTION
+---- ok
+-STATEMENT CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name))
+---- ok
+#-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64)
+#---- ok
+-STATEMENT COPY User From "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
+---- ok
+-STATEMENT COMMIT
+---- ok
+-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' RETURN u.age
+---- 1
+30
+
+#-STATEMENT COPY User From "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
+#---- ok
+#-STATEMENT COPY Follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv"
+#---- ok
+##-RELOADDB
+#-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' RETURN u.age
+#---- 1
+#30
+
+
+#-CASE createCopyCommit
+#-STATEMENT BEGIN TRANSACTION
+#---- ok
+#-STATEMENT CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name))
+#---- ok
+#-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64)
+#---- ok
+#-STATEMENT COPY User From "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
+#---- ok
+#-STATEMENT COPY Follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv"
+#---- ok
+#-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' RETURN u.age
+#---- 1
+#30
+#-STATEMENT MATCH (u:User)-[r:Follows]->(u2:User) WHERE u.name = 'Adam' RETURN u2.name
+#---- 1
+#Bob
+#-STATEMENT COMMIT
+#---- ok
+
+
+#-CASE createCopyCommit
+#-STATEMENT BEGIN TRANSACTION
+#---- ok
+#-STATEMENT CREATE NODE TABLE User(name INT64, age INT64, PRIMARY KEY (name))
+#---- ok
+#-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64)
+#---- ok
+#-STATEMENT Create (:User{name:1,age:30});
+#---- ok
+#-STATEMENT Create (:User{name:2,age:25});
+#---- ok
+#-STATEMENT Match (a:User{name:1}), (a2:User{name:2}) Create (a)-[:Follows{since:2019}]->(a2);
+#---- ok
+#-STATEMENT MATCH (u:User) WHERE u.name = '1' RETURN u.age
+#---- 1
+#30
+#-STATEMENT COMMIT
+#---- ok
+#-STATEMENT MATCH (u:User)-[r:Follows]->(u2:User) WHERE u.name = 'Adam' RETURN u2.name
+#---- 1
+#Bob
+
+#-CASE createCopyRecovery
+#-STATEMENT CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name))
+#---- ok
+#-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64)
+#---- ok
+#-STATEMENT BEGIN TRANSACTION
+#---- ok
+#-STATEMENT COPY User From "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv2"
+#---- error
+#Binder exception: No file found that matches the pattern: ${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv2.
+#-STATEMENT COPY Follows FROM "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/follows.csv"
+#---- error
+#
+#-STATEMENT COMMIT
+#---- ok
+#-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' SET u.age = 50
+#---- error
+
+#-CASE createCopyRecovery
+#-STATEMENT CREATE NODE TABLE User(name STRING, age INT64, PRIMARY KEY (name))
+#---- ok
+#-STATEMENT CREATE REL TABLE Follows(FROM User TO User, since INT64)
+#---- ok
+#-STATEMENT BEGIN TRANSACTION
+#---- ok
+#-STATEMENT COPY User From "${KUZU_ROOT_DIRECTORY}/dataset/demo-db/csv/user.csv"
+#---- ok
+#-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' RETURN u.age
+#---- 1
+#30
+#-STATEMENT COMMIT
+#---- ok
+#-STATEMENT MATCH (u:User) WHERE u.name = 'Adam' RETURN u.age
+#---- 1
+#30
