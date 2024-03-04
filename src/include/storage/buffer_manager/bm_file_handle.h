@@ -173,7 +173,7 @@ public:
     // This function assumes that the caller has already acquired the wal page idx lock.
     void setWALPageIdxNoLock(common::page_idx_t originalPageIdx, common::page_idx_t pageIdxInWAL);
 
-private:
+//private:
     inline PageState* getPageState(common::page_idx_t pageIdx) {
         KU_ASSERT(pageIdx < numPages && pageStates[pageIdx]);
         return pageStates[pageIdx].get();

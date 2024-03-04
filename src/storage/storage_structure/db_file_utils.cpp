@@ -30,6 +30,7 @@ WALPageIdxAndFrame createWALVersionIfNecessaryAndPinPage(page_idx_t originalPage
         pageIdxInWAL = fileHandle.getWALPageIdxNoWALPageIdxLock(originalPageIdx);
         walFrame = bufferManager.pin(
             *wal.fileHandle, pageIdxInWAL, BufferManager::PageReadPolicy::READ_PAGE);
+        wal.fileHandle->setLockedPageDirty(pageIdxInWAL);
     } else {
         pageIdxInWAL =
             wal.logPageUpdateRecord(dbFileID, originalPageIdx /* pageIdxInOriginalFile */);

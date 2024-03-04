@@ -310,7 +310,7 @@ uint64_t BufferManager::tryEvictPage(EvictionCandidate& candidate) {
 void BufferManager::cachePageIntoFrame(
     BMFileHandle& fileHandle, page_idx_t pageIdx, PageReadPolicy pageReadPolicy) {
     auto pageState = fileHandle.getPageState(pageIdx);
-    pageState->clearDirty();
+//    pageState->clearDirty();
     if (pageReadPolicy == PageReadPolicy::READ_PAGE) {
         fileHandle.getFileInfo()->readFromFile((void*)getFrame(fileHandle, pageIdx),
             fileHandle.getPageSize(), pageIdx * fileHandle.getPageSize());
@@ -322,6 +322,7 @@ void BufferManager::flushIfDirtyWithoutLock(BMFileHandle& fileHandle, page_idx_t
     if (pageState->isDirty()) {
         fileHandle.getFileInfo()->writeFile(getFrame(fileHandle, pageIdx), fileHandle.getPageSize(),
             pageIdx * fileHandle.getPageSize());
+        pageState->clearDirty();
     }
 }
 
