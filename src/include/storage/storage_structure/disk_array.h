@@ -340,6 +340,7 @@ public:
     }
 
     inline uint64_t getNumElements() { return diskArray.getNumElements(); }
+    inline uint64_t size() { return diskArray.getNumElements(); }
 
     inline void saveToDisk() { diskArray.saveToDisk(); }
 

@@ -81,7 +81,8 @@ void stringPKFillOffsetArraysFromVector(transaction::Transaction* transaction,
         for (auto i = 0u; i < numKeys; i++) {
             auto key =
                 keyVector->getValue<ku_string_t>(keyVector->state->selVector->selectedPositions[i]);
-            if (!nodeBatchInsertSharedState->pkIndex->lookup(key.getAsStringView(), offsets[i])) {
+            if (!nodeBatchInsertSharedState->pkIndex->lookup(
+                    transaction, key.getAsStringView(), offsets[i])) {
                 throw RuntimeException(ExceptionMessage::nonExistentPKException(key.getAsString()));
             }
         }
@@ -108,7 +109,7 @@ void primitivePKFillOffsetArraysFromVector(transaction::Transaction* transaction
         for (auto i = 0u; i < numKeys; i++) {
             auto pos = keyVector->state->selVector->selectedPositions[i];
             auto key = keyVector->getValue<T>(pos);
-            if (!nodeBatchInsertSharedState->pkIndex->lookup(key, offsets[i])) {
+            if (!nodeBatchInsertSharedState->pkIndex->lookup(transaction, key, offsets[i])) {
                 throw RuntimeException(
                     ExceptionMessage::nonExistentPKException(TypeUtils::toString(key)));
             }
