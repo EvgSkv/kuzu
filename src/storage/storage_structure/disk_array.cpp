@@ -6,9 +6,11 @@
 #include "common/types/types.h"
 #include "common/utils.h"
 #include "storage/buffer_manager/bm_file_handle.h"
+#include "storage/buffer_manager/buffer_manager.h"
 #include "storage/file_handle.h"
 #include "storage/storage_structure/db_file_utils.h"
 #include "storage/storage_utils.h"
+#include "transaction/transaction.h"
 
 using namespace kuzu::common;
 using namespace kuzu::transaction;
@@ -44,10 +46,10 @@ BaseDiskArrayInternal::BaseDiskArrayInternal(
 
 BaseDiskArrayInternal::BaseDiskArrayInternal(FileHandle& fileHandle, DBFileID dbFileID,
     page_idx_t headerPageIdx, BufferManager* bufferManager, WAL* wal,
-    transaction::Transaction* transaction)
+    transaction::Transaction* transaction, bool bypassWAL)
     : fileHandle{fileHandle}, dbFileID{dbFileID}, headerPageIdx{headerPageIdx},
       hasTransactionalUpdates{false}, bufferManager{bufferManager}, wal{wal},
-      lastAPPageIdx{INVALID_PAGE_IDX} {
+      lastAPPageIdx{INVALID_PAGE_IDX}, lastPageOnDisk{INVALID_PAGE_IDX} {
     auto [fileHandleToPin, pageIdxToPin] = DBFileUtils::getFileHandleAndPhysicalPageIdxToPin(
         ku_dynamic_cast<FileHandle&, BMFileHandle&>(fileHandle), headerPageIdx, *wal,
         transaction->getType());
@@ -59,6 +61,21 @@ BaseDiskArrayInternal::BaseDiskArrayInternal(FileHandle& fileHandle, DBFileID db
         while (pips[pips.size() - 1].pipContents.nextPipPageIdx != DBFileUtils::NULL_PAGE_IDX) {
             pips.emplace_back(fileHandle, pips[pips.size() - 1].pipContents.nextPipPageIdx);
         }
+    }
+    // If bypassing the WAL is disabled, just leave the lastPageOnDisk as invalid, as then all pages
+    // will be treated as updates to existing ones
+    if (bypassWAL) {
+        updateLastPageOnDisk();
+    }
+}
+
+void BaseDiskArrayInternal::updateLastPageOnDisk() {
+    auto numElements = getNumElementsNoLock(TransactionType::READ_ONLY);
+    if (numElements > 0) {
+        auto apCursor = getAPIdxAndOffsetInAP(numElements);
+        lastPageOnDisk = getAPPageIdxNoLock(apCursor.pageIdx, TransactionType::READ_ONLY);
+    } else {
+        lastPageOnDisk = 0;
     }
 }
 
@@ -86,7 +103,7 @@ void BaseDiskArrayInternal::get(uint64_t idx, TransactionType trxType, std::span
     page_idx_t apPageIdx = getAPPageIdxNoLock(apCursor.pageIdx, trxType);
     auto& bmFileHandle = (BMFileHandle&)fileHandle;
     if (trxType == TransactionType::READ_ONLY || !hasTransactionalUpdates ||
-        !bmFileHandle.hasWALPageVersionNoWALPageIdxLock(apPageIdx)) {
+        apPageIdx > lastPageOnDisk || !bmFileHandle.hasWALPageVersionNoWALPageIdxLock(apPageIdx)) {
         bufferManager->optimisticRead(bmFileHandle, apPageIdx, [&](const uint8_t* frame) -> void {
             memcpy(val.data(), frame + apCursor.elemPosInPage, val.size());
         });
@@ -96,6 +113,24 @@ void BaseDiskArrayInternal::get(uint64_t idx, TransactionType trxType, std::span
             [&val, &apCursor](const uint8_t* frame) -> void {
                 memcpy(val.data(), frame + apCursor.elemPosInPage, val.size());
             });
+    }
+}
+
+void BaseDiskArrayInternal::updatePage(
+    uint64_t pageIdx, bool isNewPage, std::function<void(uint8_t*)> updateOp) {
+    auto& bmFileHandle = (BMFileHandle&)fileHandle;
+    // Pages which are new to this transaction are written directly to the file
+    // Pages which previously existed are written to the WAL file
+    if (pageIdx <= lastPageOnDisk) {
+        DBFileUtils::updatePage(bmFileHandle, dbFileID, pageIdx,
+            false /* not inserting a new page */, *bufferManager, *wal, updateOp);
+    } else {
+        auto frame = bufferManager->pin(bmFileHandle, pageIdx,
+            isNewPage ? BufferManager::PageReadPolicy::DONT_READ_PAGE :
+                        BufferManager::PageReadPolicy::READ_PAGE);
+        updateOp(frame);
+        bmFileHandle.setLockedPageDirty(pageIdx);
+        bufferManager->unpin(bmFileHandle, pageIdx);
     }
 }
 
@@ -114,11 +149,9 @@ void BaseDiskArrayInternal::update(uint64_t idx, std::span<uint8_t> val) {
     // getAPPageIdxNoLock logic needs to change to give the same guarantee (e.g., an apIdx = 0, may
     // no longer to be guaranteed to be in pips[0].)
     page_idx_t apPageIdx = getAPPageIdxNoLock(apCursor.pageIdx, TransactionType::WRITE);
-    DBFileUtils::updatePage((BMFileHandle&)fileHandle, dbFileID, apPageIdx,
-        false /* not inserting a new page */, *bufferManager, *wal,
-        [&apCursor, &val](uint8_t* frame) -> void {
-            memcpy(frame + apCursor.elemPosInPage, val.data(), val.size());
-        });
+    updatePage(apPageIdx, false /*isNewPage=*/, [&apCursor, &val](uint8_t* frame) -> void {
+        memcpy(frame + apCursor.elemPosInPage, val.data(), val.size());
+    });
 }
 
 uint64_t BaseDiskArrayInternal::pushBack(std::span<uint8_t> val) {
@@ -144,10 +177,9 @@ uint64_t BaseDiskArrayInternal::pushBackNoLock(std::span<uint8_t> val) {
         getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(&headerForWriteTrx, apCursor.pageIdx);
     // Now do the push back.
     lastAPPageIdx = apPageIdx;
-    DBFileUtils::updatePage((BMFileHandle&)(fileHandle), dbFileID, apPageIdx, isNewlyAdded,
-        *bufferManager, *wal, [&apCursor, &val](uint8_t* frame) -> void {
-            memcpy(frame + apCursor.elemPosInPage, val.data(), val.size());
-        });
+    updatePage(apPageIdx, isNewlyAdded, [&apCursor, &val](uint8_t* frame) -> void {
+        memcpy(frame + apCursor.elemPosInPage, val.data(), val.size());
+    });
     headerForWriteTrx.numElements++;
     return elementIdx;
 }
@@ -253,12 +285,16 @@ void BaseDiskArrayInternal::checkpointOrRollbackInMemoryIfNecessaryNoLock(bool i
     // Note that we already updated the header to its correct state above.
     pipUpdates.clear();
     hasTransactionalUpdates = false;
+    if (isCheckpoint && lastPageOnDisk != INVALID_PAGE_IDX) {
+        updateLastPageOnDisk();
+    }
 }
 
 void BaseDiskArrayInternal::prepareCommit() {
+    auto& bmFileHandle = ku_dynamic_cast<FileHandle&, BMFileHandle&>(fileHandle);
     // Update header if it has changed
     if (headerForWriteTrx != header) {
-        DBFileUtils::updatePage((BMFileHandle&)(fileHandle), dbFileID, headerPageIdx,
+        DBFileUtils::updatePage(bmFileHandle, dbFileID, headerPageIdx,
             false /* not inserting a new page */, *bufferManager, *wal,
             [&](uint8_t* frame) -> void {
                 memcpy(frame, &headerForWriteTrx, sizeof(headerForWriteTrx));

@@ -11,6 +11,7 @@
 #include "hash_index_header.h"
 #include "hash_index_slot.h"
 #include "storage/buffer_manager/bm_file_handle.h"
+#include "storage/buffer_manager/buffer_manager.h"
 #include "storage/file_handle.h"
 #include "storage/index/hash_index_builder.h"
 #include "storage/index/hash_index_utils.h"
@@ -349,6 +350,7 @@ private:
     std::shared_ptr<BMFileHandle> fileHandle;
     std::unique_ptr<OverflowFile> overflowFile;
     std::vector<std::unique_ptr<OnDiskHashIndex>> hashIndices;
+    BufferManager& bufferManager;
 };
 
 } // namespace storage

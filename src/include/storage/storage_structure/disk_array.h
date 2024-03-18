@@ -109,7 +109,7 @@ public:
     // Used when loading from file
     BaseDiskArrayInternal(FileHandle& fileHandle, DBFileID dbFileID,
         common::page_idx_t headerPageIdx, BufferManager* bufferManager, WAL* wal,
-        transaction::Transaction* transaction);
+        transaction::Transaction* transaction, bool bypassWAL = false);
 
     virtual ~BaseDiskArrayInternal() = default;
 
@@ -204,16 +204,7 @@ public:
 
         inline iterator& operator+=(size_t increment) { return seek(idx + increment); }
 
-        ~iterator() {
-            // TODO(bmwinger): this should be moved into WALPageIdxAndFrame's destructor (or
-            // something similar)
-            if (walPageIdxAndFrame.originalPageIdx != common::INVALID_PAGE_IDX) {
-                diskArray.bufferManager->unpin(
-                    *diskArray.wal->fileHandle, walPageIdxAndFrame.pageIdxInWAL);
-                common::ku_dynamic_cast<FileHandle&, BMFileHandle&>(diskArray.fileHandle)
-                    .releaseWALPageIdxLock(walPageIdxAndFrame.originalPageIdx);
-            }
-        }
+        ~iterator() { unpin(); }
 
         std::span<uint8_t> operator*() const {
             KU_ASSERT(idx < diskArray.headerForWriteTrx.numElements);
@@ -224,24 +215,48 @@ public:
         inline uint64_t size() const { return diskArray.headerForWriteTrx.numElements; }
 
     private:
-        inline void getPage(common::page_idx_t newPageIdx, bool isNewlyAdded) {
+        inline void unpin() {
+            // TODO(bmwinger): this should be moved into WALPageIdxAndFrame's destructor (or
+            // something similar)
+            auto& bmFileHandle =
+                common::ku_dynamic_cast<FileHandle&, BMFileHandle&>(diskArray.fileHandle);
             if (walPageIdxAndFrame.pageIdxInWAL != common::INVALID_PAGE_IDX) {
                 // unpin current page
                 diskArray.bufferManager->unpin(
                     *diskArray.wal->fileHandle, walPageIdxAndFrame.pageIdxInWAL);
-                common::ku_dynamic_cast<FileHandle&, BMFileHandle&>(diskArray.fileHandle)
-                    .releaseWALPageIdxLock(walPageIdxAndFrame.originalPageIdx);
+                bmFileHandle.releaseWALPageIdxLock(walPageIdxAndFrame.originalPageIdx);
+            } else if (walPageIdxAndFrame.originalPageIdx != common::INVALID_PAGE_IDX) {
+                bmFileHandle.setLockedPageDirty(walPageIdxAndFrame.originalPageIdx);
+                diskArray.bufferManager->unpin(bmFileHandle, walPageIdxAndFrame.originalPageIdx);
             }
-            // Pin new page
-            walPageIdxAndFrame = DBFileUtils::createWALVersionIfNecessaryAndPinPage(newPageIdx,
-                isNewlyAdded, (BMFileHandle&)diskArray.fileHandle, diskArray.dbFileID,
-                *diskArray.bufferManager, *diskArray.wal);
+        }
+        inline void getPage(common::page_idx_t newPageIdx, bool isNewlyAdded) {
+            auto& bmFileHandle =
+                common::ku_dynamic_cast<FileHandle&, BMFileHandle&>(diskArray.fileHandle);
+            unpin();
+            if (newPageIdx <= diskArray.lastPageOnDisk) {
+                // Pin new page
+                walPageIdxAndFrame =
+                    DBFileUtils::createWALVersionIfNecessaryAndPinPage(newPageIdx, isNewlyAdded,
+                        bmFileHandle, diskArray.dbFileID, *diskArray.bufferManager, *diskArray.wal);
+            } else {
+                walPageIdxAndFrame.frame = diskArray.bufferManager->pin(bmFileHandle, newPageIdx,
+                    isNewlyAdded ? BufferManager::PageReadPolicy::DONT_READ_PAGE :
+                                   BufferManager::PageReadPolicy::READ_PAGE);
+                walPageIdxAndFrame.originalPageIdx = newPageIdx;
+                walPageIdxAndFrame.pageIdxInWAL = common::INVALID_PAGE_IDX;
+            }
         }
     };
 
     iterator iter(uint64_t valueSize);
 
 protected:
+    // Updates to new pages (new to this transaction) bypass the wal file.
+    void updatePage(uint64_t pageIdx, bool isNewPage, std::function<void(uint8_t*)> updateOp);
+
+    void updateLastPageOnDisk();
+
     uint64_t pushBackNoLock(std::span<uint8_t> val);
 
     inline uint64_t getNumElementsNoLock(transaction::TransactionType trxType) {
@@ -310,6 +325,7 @@ protected:
     std::shared_mutex diskArraySharedMtx;
     // For write transactions only
     common::page_idx_t lastAPPageIdx;
+    common::page_idx_t lastPageOnDisk;
 };
 
 template<typename U>
@@ -324,9 +340,14 @@ public:
     BaseDiskArray(FileHandle& fileHandle, common::page_idx_t headerPageIdx, uint64_t elementSize)
         : diskArray(fileHandle, headerPageIdx, elementSize) {}
     // Used when loading from file
+    // If bypassWAL is set, the buffer manager is used to pages new to this transaction to the
+    // original file, but does not handle flushing them. BufferManager::flushAllDirtyPagesInFrames
+    // should be called on this file handle exactly once during prepare commit.
     BaseDiskArray(FileHandle& fileHandle, DBFileID dbFileID, common::page_idx_t headerPageIdx,
-        BufferManager* bufferManager, WAL* wal, transaction::Transaction* transaction)
-        : diskArray(fileHandle, dbFileID, headerPageIdx, bufferManager, wal, transaction) {}
+        BufferManager* bufferManager, WAL* wal, transaction::Transaction* transaction,
+        bool bypassWAL = false)
+        : diskArray(
+              fileHandle, dbFileID, headerPageIdx, bufferManager, wal, transaction, bypassWAL) {}
 
     // Note: This function is to be used only by the WRITE trx.
     // The return value is the idx of val in array.
@@ -371,7 +392,6 @@ public:
             iter.seek(idx);
             return *this;
         }
-
 
         inline uint64_t idx() const { return iter.idx; }
 

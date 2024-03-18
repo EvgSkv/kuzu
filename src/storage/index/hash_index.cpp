@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include "common/assert.h"
+#include "common/cast.h"
 #include "common/exception/runtime.h"
 #include "common/string_format.h"
 #include "common/string_utils.h"
@@ -15,6 +16,8 @@
 #include "common/types/ku_string.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
+#include "storage/buffer_manager/bm_file_handle.h"
+#include "storage/file_handle.h"
 #include "storage/index/hash_index_builder.h"
 #include "storage/index/hash_index_header.h"
 #include "storage/index/hash_index_slot.h"
@@ -108,7 +111,7 @@ HashIndex<T>::HashIndex(const DBFileIDAndName& dbFileIDAndName,
     // TODO: Handle data not existing
     headerArray = std::make_unique<BaseDiskArray<HashIndexHeader>>(*fileHandle,
         dbFileIDAndName.dbFileID, NUM_HEADER_PAGES * indexPos + INDEX_HEADER_ARRAY_HEADER_PAGE_IDX,
-        &bm, wal, Transaction::getDummyReadOnlyTrx().get());
+        &bm, wal, Transaction::getDummyReadOnlyTrx().get(), true /*bypassWAL*/);
     // Read indexHeader from the headerArray, which contains only one element.
     this->indexHeaderForReadTrx = std::make_unique<HashIndexHeader>(
         headerArray->get(INDEX_HEADER_IDX_IN_ARRAY, TransactionType::READ_ONLY));
@@ -117,10 +120,10 @@ HashIndex<T>::HashIndex(const DBFileIDAndName& dbFileIDAndName,
         this->indexHeaderForReadTrx->keyDataTypeID == TypeUtils::getPhysicalTypeIDForType<T>());
     pSlots = std::make_unique<BaseDiskArray<Slot<T>>>(*fileHandle, dbFileIDAndName.dbFileID,
         NUM_HEADER_PAGES * indexPos + P_SLOTS_HEADER_PAGE_IDX, &bm, wal,
-        Transaction::getDummyReadOnlyTrx().get());
+        Transaction::getDummyReadOnlyTrx().get(), true /*bypassWAL*/);
     oSlots = std::make_unique<BaseDiskArray<Slot<T>>>(*fileHandle, dbFileIDAndName.dbFileID,
         NUM_HEADER_PAGES * indexPos + O_SLOTS_HEADER_PAGE_IDX, &bm, wal,
-        Transaction::getDummyReadOnlyTrx().get());
+        Transaction::getDummyReadOnlyTrx().get(), true /*bypassWAL*/);
     // Initialize functions.
     localStorage = std::make_unique<HashIndexLocalStorage<BufferKeyType>>();
 }
@@ -636,7 +639,7 @@ template class HashIndex<ku_string_t>;
 PrimaryKeyIndex::PrimaryKeyIndex(const DBFileIDAndName& dbFileIDAndName, bool readOnly,
     common::PhysicalTypeID keyDataType, BufferManager& bufferManager, WAL* wal,
     VirtualFileSystem* vfs)
-    : keyDataTypeID(keyDataType), hasRunPrepareCommit{false} {
+    : hasRunPrepareCommit{false}, keyDataTypeID(keyDataType), bufferManager{bufferManager} {
     fileHandle = bufferManager.getBMFileHandle(dbFileIDAndName.fName,
         readOnly ? FileHandle::O_PERSISTENT_FILE_READ_ONLY :
                    FileHandle::O_PERSISTENT_FILE_NO_CREATE,
@@ -734,6 +737,13 @@ void PrimaryKeyIndex::prepareCommit() {
         if (overflowFile) {
             overflowFile->prepareCommit();
         }
+        // Make sure that changes which bypassed the WAL are written.
+        // There is no other mechanism for enforcing that they are flushed
+        // and they will be dropped when the file handle is destroyed.
+        // TODO: Should eventually be moved into the disk array when the disk array can
+        // generally handle bypassing the WAL, but should only be run once per file, not once per
+        // disk array
+        bufferManager.flushAllDirtyPagesInFrames(*fileHandle);
         hasRunPrepareCommit = true;
     }
 }
