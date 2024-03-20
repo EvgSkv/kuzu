@@ -6,6 +6,8 @@
 #include "planner/operator/extend/recursive_join_type.h"
 #include "processor/operator/mask.h"
 #include "processor/operator/physical_operator.h"
+#include "processor/result/factorized_table.h"
+#include "ife.h" // TODO: remove
 
 namespace kuzu {
 namespace processor {
@@ -131,6 +133,7 @@ private:
     std::unique_ptr<FrontiersScanner> frontiersScanner;
     std::unique_ptr<TargetDstNodes> targetDstNodes;
 };
+
 
 } // namespace processor
 } // namespace kuzu
