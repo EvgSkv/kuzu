@@ -1,11 +1,13 @@
 #include "storage/storage_structure/disk_array.h"
 
 #include "common/cast.h"
+#include "common/constants.h"
 #include "common/string_format.h"
 #include "common/utils.h"
 #include "storage/buffer_manager/bm_file_handle.h"
 #include "storage/file_handle.h"
 #include "storage/storage_structure/db_file_utils.h"
+#include "storage/storage_utils.h"
 
 using namespace kuzu::common;
 using namespace kuzu::transaction;
@@ -124,14 +126,13 @@ uint64_t BaseDiskArrayInternal::pushBack(std::span<uint8_t> val) {
 }
 
 uint64_t BaseDiskArrayInternal::resize(uint64_t newNumElements, std::span<uint8_t> defaultVal) {
-    std::unique_lock xLck{diskArraySharedMtx};
+    auto it = iter(defaultVal.size());
     hasTransactionalUpdates = true;
-    auto currentNumElements = getNumElementsNoLock(TransactionType::WRITE);
-    while (currentNumElements < newNumElements) {
-        pushBackNoLock(defaultVal);
-        currentNumElements++;
+    while (it.size() < newNumElements) {
+        it.pushBack();
+        memcpy((*it).data(), defaultVal.data(), defaultVal.size());
     }
-    return currentNumElements;
+    return it.originalNumElements;
 }
 
 uint64_t BaseDiskArrayInternal::pushBackNoLock(std::span<uint8_t> val) {
@@ -324,6 +325,11 @@ BaseDiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
             });
         return std::make_pair(newAPPageIdx, true /* inserting a new ap page */);
     }
+}
+
+BaseDiskArrayInternal::iterator BaseDiskArrayInternal::iter(uint64_t valueSize) {
+    std::unique_lock xLck{diskArraySharedMtx};
+    return BaseDiskArrayInternal::iterator(valueSize, *this, std::move(xLck));
 }
 
 BaseInMemDiskArray::BaseInMemDiskArray(FileHandle& fileHandle, DBFileID dbFileID,

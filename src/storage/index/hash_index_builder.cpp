@@ -262,6 +262,45 @@ bool HashIndexBuilder<ku_string_t>::equals(
     }
 }
 
+template<typename T>
+void HashIndexBuilder<T>::forEach(std::function<void(slot_id_t, uint8_t, SlotEntry<T>)> func) {
+    for (auto slotId = 0u; slotId < pSlots.size(); slotId++) {
+        auto iter = SlotIterator{slotId, const_cast<HashIndexBuilder<T>*>(this)};
+        do {
+            if (!iter.slot->header.validityMask) {
+                continue;
+            }
+            for (auto entryPos = 0; entryPos < getSlotCapacity<T>(); entryPos++) {
+                if (iter.slot->header.isEntryValid(entryPos)) {
+                    func(slotId, iter.slot->header.fingerprints[entryPos],
+                        iter.slot->entries[entryPos]);
+                }
+            }
+        } while (nextChainedSlot(iter));
+    }
+}
+
+template<typename T>
+std::string HashIndexBuilder<T>::toString() {
+    std::string result;
+    std::optional<slot_id_t> currentSlotId;
+    forEach([&](slot_id_t slotId, uint8_t, SlotEntry<T> entry) {
+        if (slotId != currentSlotId) {
+            result += "\nSlot " + std::to_string(slotId) + ": ";
+            currentSlotId = slotId;
+        }
+        if constexpr (std::same_as<T, ku_string_t>) {
+            auto str =
+                overflowFileHandle->readString(transaction::TransactionType::WRITE, entry.key);
+            result += "(" + str + ", ";
+        } else {
+            result += "(" + TypeUtils::toString(entry.key) + ", ";
+        }
+        result += std::to_string(entry.value) + ") ";
+    });
+    return result;
+}
+
 template class HashIndexBuilder<int64_t>;
 template class HashIndexBuilder<int32_t>;
 template class HashIndexBuilder<int16_t>;

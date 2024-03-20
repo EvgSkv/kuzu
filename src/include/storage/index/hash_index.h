@@ -127,6 +127,7 @@ private:
     // TODO: If locking is removed from the disk arrays, then many of these functions could be const
     std::string toString(transaction::TransactionType trxType);
     void validateEntries(transaction::TransactionType trxType);
+    void validateBulkInserts();
 
     // Resizes the local storage to support the given number of new entries
     inline void bulkReserve(uint64_t /*newEntries*/) override {

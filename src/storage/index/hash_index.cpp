@@ -290,6 +290,37 @@ void HashIndex<T>::prepareCommit() {
 }
 
 template<typename T>
+// Checks that everything in the bulkInsertLocalStorage can be found in the index
+// Only meaningful if called after mergeBulkInserts and before checkpointing.
+void HashIndex<T>::validateBulkInserts() {
+    for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots.size(); slotId++) {
+        auto localSlot =
+            typename HashIndexBuilder<T>::SlotIterator(slotId, &bulkInsertLocalStorage);
+        do {
+            for (auto entryPos = 0u; entryPos < getSlotCapacity<T>(); entryPos++) {
+                if (!localSlot.slot->header.isEntryValid(entryPos)) {
+                    continue;
+                }
+                offset_t result;
+                if constexpr (std::same_as<T, ku_string_t>) {
+                    auto string = overflowFileHandle->readString(
+                        TransactionType::WRITE, localSlot.slot->entries[entryPos].key);
+                    if (!lookupInPersistentIndex(TransactionType::WRITE, string, result)) {
+                        KU_ASSERT(false);
+                    }
+                } else {
+                    if (!lookupInPersistentIndex(TransactionType::WRITE,
+                            localSlot.slot->entries[entryPos].key, result)) {
+                        KU_ASSERT(false);
+                    }
+                }
+                KU_ASSERT(result == localSlot.slot->entries[entryPos].value);
+            }
+        } while (bulkInsertLocalStorage.nextChainedSlot(localSlot));
+    }
+}
+
+template<typename T>
 void HashIndex<T>::prepareRollback() {
     if (localStorage->hasUpdates()) {
         wal->addToUpdatedTables(dbFileIDAndName.dbFileID.nodeIndexID.tableID);
@@ -355,9 +386,7 @@ void HashIndex<T>::rehashSlots(HashIndexHeader& header) {
             hash_t hash = this->hashStored(TransactionType::WRITE, key);
             auto fingerprint = HashIndexUtils::getFingerprintForHash(hash);
             auto newSlotId = hash & header.higherLevelHashMask;
-            if (newSlotId >= pSlots->getNumElements(TransactionType::WRITE)) {
-                KU_ASSERT(false);
-            }
+            KU_ASSERT(newSlotId < pSlots->getNumElements(TransactionType::WRITE));
             copyEntryToSlot(newSlotId, key, fingerprint);
         }
     }
@@ -418,6 +447,8 @@ void HashIndex<T>::reserve(uint64_t newEntries) {
         // re-hashing a slot multiple times
         for (auto slots = pSlots->getNumElements(TransactionType::WRITE); slots < numRequiredSlots;
              slots++) {
+            // TODO: Use diskarray iterator to avoid updating the same page repeatedly
+            // appendPSlot/pushBack
             splitSlot(*this->indexHeaderForWriteTrx);
         }
     }
@@ -455,6 +486,18 @@ void HashIndex<T>::mergeBulkInserts() {
     // temporary vector buffers instead of slots for improved performance) and then merge each of
     // those one at a time into the disk slots. That will keep the low memory requirements and still
     // let us update each on-disk slot one at a time.
+
+    // TODO: This will write to the WAL file for every slot visited
+    // If the primary slot is already full, it will not need to be written,
+    // but we would only want to skip the write if no primary slots on the page are modified
+    // It may be faster just to assume we will write, since after the reserve there should generally
+    // be sufficient space
+    auto diskSlotIterator = pSlots->iter();
+    // TODO: Use a separate random access iterator and one that's sequential for adding new overflow
+    // slots All new slots will be sequential and benefit from caching, but for existing randomly
+    // accessed slots we just benefit from the interface. However, the two iterators would not be
+    // able to pin the same page simultaneously
+    auto diskOverflowSlotIterator = oSlots->iter();
     for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots.size(); slotId++) {
         auto localSlot =
             typename HashIndexBuilder<T>::SlotIterator(slotId, &bulkInsertLocalStorage);
@@ -464,81 +507,50 @@ void HashIndex<T>::mergeBulkInserts() {
             // builder
             continue;
         }
-        auto diskSlot = getSlotIterator(slotId, TransactionType::WRITE);
-        bool isNewDiskSlot = false;
-        bool diskSlotChanged = false;
+        diskSlotIterator.seek(slotId);
         slot_id_t diskEntryPos = 0u;
+        auto* diskSlot = &*diskSlotIterator;
         // Merge slot from local storage to existing slot
-        // Values which need to be rehashed to a different slot get moved into local storage
         do {
             for (auto entryPos = 0u; entryPos < getSlotCapacity<T>(); entryPos++) {
                 if (localSlot.slot->header.isEntryValid(entryPos)) {
                     // Find the next empty entry, or add a new slot if there are no more entries
-                    while (diskSlot.slot.header.isEntryValid(diskEntryPos) ||
+                    while (diskSlot->header.isEntryValid(diskEntryPos) ||
                            diskEntryPos >= getSlotCapacity<T>()) {
                         diskEntryPos++;
                         if (diskEntryPos >= getSlotCapacity<T>()) {
-                            // If there are no more disk slots in this chain, we need to add one
-                            // To avoid updating the slot twice, use the current number of overflow
-                            // slots as the next index to be added.
-                            auto originalNextOvfSlotId = diskSlot.slot.header.nextOvfSlotId;
-                            if (originalNextOvfSlotId == 0) {
-                                // If it's a new disk slot, then it will be written to the end of
-                                // the overflow slots and we want the following slot id as the next
-                                // slot id
-                                diskSlot.slot.header.nextOvfSlotId =
-                                    oSlots->getNumElements(TransactionType::WRITE) +
-                                    (isNewDiskSlot ? 1 : 0);
-                                KU_ASSERT(diskSlot.slot.header.nextOvfSlotId !=
-                                              diskSlot.slotInfo.slotId ||
-                                          diskSlot.slotInfo.slotType != SlotType::OVF);
-                            }
-                            if (diskSlotChanged) {
-                                if (isNewDiskSlot) {
-                                    appendOverflowSlot(std::move(diskSlot.slot));
-                                } else {
-                                    updateSlot(diskSlot.slotInfo, diskSlot.slot);
-                                }
-                            }
-                            if (originalNextOvfSlotId == 0) {
-                                diskSlot.slot = Slot<T>();
-                                diskSlot.slotInfo = {
-                                    oSlots->getNumElements(TransactionType::WRITE), SlotType::OVF};
-                                // updateSlot will fail on new slots
-                                isNewDiskSlot = true;
+                            if (diskSlot->header.nextOvfSlotId == 0) {
+                                // If there are no more disk slots in this chain, we need to add one
+                                diskSlot->header.nextOvfSlotId = diskOverflowSlotIterator.size();
+                                // This may invalidate diskSlot
+                                diskOverflowSlotIterator.pushBack();
                             } else {
-                                nextChainedSlot(TransactionType::WRITE, diskSlot);
+                                diskOverflowSlotIterator.seek(diskSlot->header.nextOvfSlotId);
                             }
-                            diskSlotChanged = false;
+                            diskSlot = &*diskOverflowSlotIterator;
                             diskEntryPos = 0;
                         }
                     }
-                    diskSlotChanged = true;
                     KU_ASSERT(diskEntryPos < getSlotCapacity<T>());
-                    copyAndUpdateSlotHeader<const T&, true>(diskSlot.slot, diskEntryPos,
+                    copyAndUpdateSlotHeader<const T&, true>(*diskSlot, diskEntryPos,
                         localSlot.slot->entries[entryPos].key, UINT32_MAX,
                         localSlot.slot->header.fingerprints[entryPos]);
-                    /*auto hash =
-                        hashStored(TransactionType::WRITE, localSlot.slot->entries[entryPos].key);
-                    auto primarySlot =
-                        HashIndexUtils::getPrimarySlotIdForHash(*indexHeaderForWriteTrx, hash);
-                    if (primarySlot != slotId) {
-                        KU_ASSERT(false);
-                    }*/
+                    KU_ASSERT([&]() {
+                        auto hash = hashStored(
+                            TransactionType::WRITE, localSlot.slot->entries[entryPos].key);
+                        auto primarySlot =
+                            HashIndexUtils::getPrimarySlotIdForHash(*indexHeaderForWriteTrx, hash);
+                        KU_ASSERT(localSlot.slot->header.fingerprints[entryPos] ==
+                                  HashIndexUtils::getFingerprintForHash(hash));
+                        KU_ASSERT(primarySlot == slotId);
+                        return true;
+                    }());
                     indexHeaderForWriteTrx->numEntries++;
                     diskEntryPos++;
                 }
             }
         } while (bulkInsertLocalStorage.nextChainedSlot(localSlot));
-        if (diskSlotChanged) {
-            if (isNewDiskSlot) {
-                appendOverflowSlot(std::move(diskSlot.slot));
-            } else {
-                updateSlot(diskSlot.slotInfo, diskSlot.slot);
-            }
-        }
     }
-    // validateEntries(transaction::TransactionType::WRITE);
     KU_ASSERT(originalNumEntries + bulkInsertLocalStorage.indexHeader->numEntries ==
               indexHeaderForWriteTrx->numEntries);
 }

@@ -74,6 +74,9 @@ public:
 
     uint64_t size() { return this->indexHeader->numEntries; }
 
+    void forEach(std::function<void(slot_id_t, uint8_t, SlotEntry<T>)> func);
+    std::string toString();
+
     // Assumes that space has already been allocated for the entry
     bool appendInternal(Key key, common::offset_t value, common::hash_t hash);
     Slot<T>* getSlot(const SlotInfo& slotInfo);
