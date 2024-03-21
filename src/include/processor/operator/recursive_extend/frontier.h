@@ -25,7 +25,7 @@ using node_id_map_t = std::unordered_map<common::nodeID_t, T, function::Internal
  * Var length track path         |  nodeIDs & bwdEdges
  * Var length NOT track path     |  nodeIDs & nodeIDToMultiplicity
  */
-class Frontier {
+class kFrontier {
 public:
     inline void resetState() {
         nodeIDs.clear();
