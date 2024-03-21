@@ -25,7 +25,7 @@ struct IFEState {
     bool completed();
     bool currentLevelCompleted();
     void finializeLevel(); // Be careful! This will have a race condition.
-    FrontierMorsel getMorsel();
+    FrontierMorsel getFrontierMorsel();
 };
 
 struct FrontierMorsel {
@@ -69,9 +69,12 @@ struct IFESharedState {
 
 struct Frontier {
     // I need hash map implementation that allows me to go from a node_ID to an object.
-    // This object
+    // This object vector<pair<node_ID, rel_ID, weight>>
+
+    //
 };
 
+// The naive approach is
 struct DGraph {
 
     std::vector<Frontier> frontiers;
@@ -84,17 +87,16 @@ struct DGraph {
     }
 };
 
-
 class IFE : public PhysicalOperator {
 public:
     bool getNextTuplesInternal(ExecutionContext *context) override {
         while (true) {
-            // if can scan from graph
-            //      return true
             auto ifeState = sharedState->getIFEState();
             if (ifeState == nullptr) { // No more ife to compute
                 return false;
             }
+            // if can enumerate path
+            //      return true;
             ifeState->registerThread(); // track how many threads
             computeIFE(ifeState);
         }
@@ -102,7 +104,7 @@ public:
 
     bool computeIFE(IFEState* state) {
         while (!state->completed()) {
-            auto frontierMorsel = state->getMorsel();
+            auto frontierMorsel = state->getFrontierMorsel();
             if (frontierMorsel.empty()) { // no more work on current frontier.
                 state->finishThread(); // notify thread is done with current frontier.
                 if (!state->currentLevelCompleted()) {
@@ -112,9 +114,16 @@ public:
                 }
                 continue;
             }
+
             // perform thread local scan and extend
-            // update thread local DGraph
+
+
+            // update local DGraph
         }
+    }
+
+    bool enumeratePath(IFEState* state) {
+        // morselize based on last frontier
     }
 
 
