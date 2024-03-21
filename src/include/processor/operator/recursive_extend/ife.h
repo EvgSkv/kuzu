@@ -74,8 +74,34 @@ struct Frontier {
     //
 };
 
+// Frontier set<>
+
+// a0 -e1> a1
+// a0 -e2> a2
+
+// a1 -> (e1, a0)
+// a2 -> (e2, a0)
+
+// Perfect hash map maxNodeOffset
+
+// MATCH (a:Person {})-[e:Knows*1..2 WHERE e.date=""]->(b:Person:Animal)
+// 1Trillion
+
+// a1 -e3> a3
+// a1 -e4> a4
+// a2 -e5> a3
+
+// a3 -> (e3,a1) (e5,a2)
+// a4 -> (e4,a1)
+
+// a3 -> (e6, a6)
+// a5 ->
+
+// global 256 hash table
+// thread 256 local hash table
+
 // The naive approach is
-struct DGraph {
+struct RJGraph {
 
     std::vector<Frontier> frontiers;
     Frontier* current;
@@ -102,21 +128,24 @@ public:
         }
     }
 
+    // T1, T2
+
     bool computeIFE(IFEState* state) {
         while (!state->completed()) {
             auto frontierMorsel = state->getFrontierMorsel();
             if (frontierMorsel.empty()) { // no more work on current frontier.
                 state->finishThread(); // notify thread is done with current frontier.
-                if (!state->currentLevelCompleted()) {
-                    // thread sleep. wait for other thread to finish
-                } else {
-                    state->finializeLevel();
-                }
-                continue;
+//                if (!state->currentLevelCompleted()) {
+//                    // thread sleep. wait for other thread to finish
+//                } else {
+//                    state->finializeLevel();
+//                }
+//                continue;
             }
 
+            //
             // perform thread local scan and extend
-
+            //
 
             // update local DGraph
         }
