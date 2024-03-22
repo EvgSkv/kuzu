@@ -3,6 +3,7 @@
 #include "common/cast.h"
 #include "common/constants.h"
 #include "common/string_format.h"
+#include "common/types/types.h"
 #include "common/utils.h"
 #include "storage/buffer_manager/bm_file_handle.h"
 #include "storage/file_handle.h"
@@ -39,13 +40,14 @@ BaseDiskArrayInternal::BaseDiskArrayInternal(
     FileHandle& fileHandle, page_idx_t headerPageIdx, uint64_t elementSize)
     : header{elementSize}, fileHandle{fileHandle}, headerPageIdx{headerPageIdx},
       headerForWriteTrx{header}, hasTransactionalUpdates{false},
-      bufferManager{nullptr}, wal{nullptr} {}
+      bufferManager{nullptr}, wal{nullptr}, lastAPPageIdx{INVALID_PAGE_IDX} {}
 
 BaseDiskArrayInternal::BaseDiskArrayInternal(FileHandle& fileHandle, DBFileID dbFileID,
     page_idx_t headerPageIdx, BufferManager* bufferManager, WAL* wal,
     transaction::Transaction* transaction)
     : fileHandle{fileHandle}, dbFileID{dbFileID}, headerPageIdx{headerPageIdx},
-      hasTransactionalUpdates{false}, bufferManager{bufferManager}, wal{wal} {
+      hasTransactionalUpdates{false}, bufferManager{bufferManager}, wal{wal},
+      lastAPPageIdx{INVALID_PAGE_IDX} {
     auto [fileHandleToPin, pageIdxToPin] = DBFileUtils::getFileHandleAndPhysicalPageIdxToPin(
         ku_dynamic_cast<FileHandle&, BMFileHandle&>(fileHandle), headerPageIdx, *wal,
         transaction->getType());
@@ -141,6 +143,7 @@ uint64_t BaseDiskArrayInternal::pushBackNoLock(std::span<uint8_t> val) {
     auto [apPageIdx, isNewlyAdded] =
         getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(&headerForWriteTrx, apCursor.pageIdx);
     // Now do the push back.
+    lastAPPageIdx = apPageIdx;
     DBFileUtils::updatePage((BMFileHandle&)(fileHandle), dbFileID, apPageIdx, isNewlyAdded,
         *bufferManager, *wal, [&apCursor, &val](uint8_t* frame) -> void {
             memcpy(frame + apCursor.elemPosInPage, val.data(), val.size());
@@ -276,7 +279,9 @@ bool BaseDiskArrayInternal::hasPIPUpdatesNoLock(uint64_t pipIdx) {
 std::pair<page_idx_t, bool>
 BaseDiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
     DiskArrayHeader* updatedDiskArrayHeader, page_idx_t apIdx) {
-    if (apIdx < updatedDiskArrayHeader->numAPs) {
+    if (apIdx == updatedDiskArrayHeader->numAPs - 1 && lastAPPageIdx != INVALID_PAGE_IDX) {
+        return std::make_pair(lastAPPageIdx, false /*not a new page*/);
+    } else if (apIdx < updatedDiskArrayHeader->numAPs) {
         // If the apIdx of the array page is < updatedDiskArrayHeader->numAPs, we do not have to
         // add a new array page, so directly return the pageIdx of the apIdx.
         return std::make_pair(getAPPageIdxNoLock(apIdx, TransactionType::WRITE),

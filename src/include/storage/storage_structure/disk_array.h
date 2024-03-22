@@ -196,6 +196,7 @@ public:
             auto [apPageIdx, isNewlyAdded] =
                 diskArray.getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
                     &diskArray.headerForWriteTrx, apCursor.pageIdx);
+            diskArray.lastAPPageIdx = apPageIdx;
             if (isNewlyAdded || walPageIdxAndFrame.originalPageIdx == common::INVALID_PAGE_IDX) {
                 getPage(apPageIdx, isNewlyAdded);
             }
@@ -307,6 +308,8 @@ protected:
     std::vector<PIPWrapper> pips;
     PIPUpdates pipUpdates;
     std::shared_mutex diskArraySharedMtx;
+    // For write transactions only
+    common::page_idx_t lastAPPageIdx;
 };
 
 template<typename U>
