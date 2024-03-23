@@ -16,14 +16,17 @@ f_group_pos Schema::createGroup() {
 }
 
 void Schema::insertToScope(
-    const std::shared_ptr<binder::Expression>& expression, f_group_pos groupPos) {
+    const std::shared_ptr<Expression>& expression, f_group_pos groupPos) {
     KU_ASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
     expressionNameToGroupPos.insert({expression->getUniqueName(), groupPos});
     expressionsInScope.push_back(expression);
 }
 
 void Schema::insertToGroupAndScope(
-    const std::shared_ptr<binder::Expression>& expression, f_group_pos groupPos) {
+    const std::shared_ptr<Expression>& expression, f_group_pos groupPos) {
+    if (expressionNameToGroupPos.contains(expression->getUniqueName())) {
+        auto a = 0;
+    }
     KU_ASSERT(!expressionNameToGroupPos.contains(expression->getUniqueName()));
     expressionNameToGroupPos.insert({expression->getUniqueName(), groupPos});
     groups[groupPos]->insertExpression(expression);
@@ -31,7 +34,7 @@ void Schema::insertToGroupAndScope(
 }
 
 void Schema::insertToScopeMayRepeat(
-    const std::shared_ptr<binder::Expression>& expression, uint32_t groupPos) {
+    const std::shared_ptr<Expression>& expression, uint32_t groupPos) {
     if (expressionNameToGroupPos.contains(expression->getUniqueName())) {
         return;
     }
@@ -39,7 +42,7 @@ void Schema::insertToScopeMayRepeat(
 }
 
 void Schema::insertToGroupAndScopeMayRepeat(
-    const std::shared_ptr<binder::Expression>& expression, uint32_t groupPos) {
+    const std::shared_ptr<Expression>& expression, uint32_t groupPos) {
     if (expressionNameToGroupPos.contains(expression->getUniqueName())) {
         return;
     }
@@ -47,18 +50,21 @@ void Schema::insertToGroupAndScopeMayRepeat(
 }
 
 void Schema::insertToGroupAndScope(
-    const binder::expression_vector& expressions, f_group_pos groupPos) {
+    const expression_vector& expressions, f_group_pos groupPos) {
     for (auto& expression : expressions) {
         insertToGroupAndScope(expression, groupPos);
     }
 }
 
 f_group_pos Schema::getGroupPos(const std::string& expressionName) const {
+    if (!expressionNameToGroupPos.contains(expressionName)) {
+        auto a = 1;
+    }
     KU_ASSERT(expressionNameToGroupPos.contains(expressionName));
     return expressionNameToGroupPos.at(expressionName);
 }
 
-bool Schema::isExpressionInScope(const binder::Expression& expression) const {
+bool Schema::isExpressionInScope(const Expression& expression) const {
     for (auto& expressionInScope : expressionsInScope) {
         if (expressionInScope->getUniqueName() == expression.getUniqueName()) {
             return true;
@@ -67,8 +73,8 @@ bool Schema::isExpressionInScope(const binder::Expression& expression) const {
     return false;
 }
 
-binder::expression_vector Schema::getExpressionsInScope(f_group_pos pos) const {
-    binder::expression_vector result;
+expression_vector Schema::getExpressionsInScope(f_group_pos pos) const {
+    expression_vector result;
     for (auto& expression : expressionsInScope) {
         if (getGroupPos(expression->getUniqueName()) == pos) {
             result.push_back(expression);
@@ -77,9 +83,19 @@ binder::expression_vector Schema::getExpressionsInScope(f_group_pos pos) const {
     return result;
 }
 
-binder::expression_vector Schema::getSubExpressionsInScope(
-    const std::shared_ptr<binder::Expression>& expression) {
-    binder::expression_vector results;
+expression_vector Schema::getExprsInScopeRecursive(const expression_vector& exprs) {
+    expression_vector result;
+    for (auto& expr : exprs) {
+        for (auto& e : getSubExpressionsInScope(expr)) {
+            result.push_back(e);
+        }
+    }
+    return result;
+}
+
+expression_vector Schema::getSubExpressionsInScope(
+    const std::shared_ptr<Expression>& expression) {
+    expression_vector results;
     if (isExpressionInScope(*expression)) {
         results.push_back(expression);
         return results;
@@ -93,7 +109,7 @@ binder::expression_vector Schema::getSubExpressionsInScope(
 }
 
 std::unordered_set<f_group_pos> Schema::getDependentGroupsPos(
-    const std::shared_ptr<binder::Expression>& expression) {
+    const std::shared_ptr<Expression>& expression) {
     std::unordered_set<f_group_pos> result;
     for (auto& subExpression : getSubExpressionsInScope(expression)) {
         result.insert(getGroupPos(subExpression->getUniqueName()));

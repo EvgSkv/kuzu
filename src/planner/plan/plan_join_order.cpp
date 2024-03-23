@@ -105,6 +105,7 @@ std::vector<std::unique_ptr<LogicalPlan>> Planner::enumerateQueryGraphCollection
     // cross product.
     if (context.subqueryType == SubqueryType::CORRELATED &&
         queryGraphIdxToPlanExpressionsScan == -1) {
+        plansPerQueryGraph.clear();
         auto plan = std::make_unique<LogicalPlan>();
         appendExpressionsScan(context.getCorrelatedExpressions(), *plan);
         appendDistinct(context.getCorrelatedExpressions(), *plan);

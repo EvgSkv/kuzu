@@ -108,6 +108,7 @@ public:
 
     binder::expression_vector getExpressionsInScope(f_group_pos pos) const;
 
+    binder::expression_vector getExprsInScopeRecursive(const binder::expression_vector& exprs);
     binder::expression_vector getSubExpressionsInScope(
         const std::shared_ptr<binder::Expression>& expression);
 

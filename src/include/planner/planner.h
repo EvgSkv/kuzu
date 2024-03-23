@@ -265,7 +265,7 @@ private:
     void appendScanFile(const binder::BoundFileScanInfo* info,
         std::shared_ptr<binder::Expression> offset, LogicalPlan& plan);
 
-    void appendDistinct(const binder::expression_vector& expressionsToDistinct, LogicalPlan& plan);
+    void appendDistinct(const binder::expression_vector& exprs, LogicalPlan& plan);
 
     std::unique_ptr<LogicalPlan> createUnionPlan(
         std::vector<std::unique_ptr<LogicalPlan>>& childrenPlans, bool isUnionAll);

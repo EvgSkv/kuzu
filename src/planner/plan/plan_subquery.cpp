@@ -9,7 +9,7 @@ using namespace kuzu::common;
 namespace kuzu {
 namespace planner {
 
-static expression_vector getCorrelatedExpressions(const QueryGraphCollection& collection,
+static expression_vector getCorrelatedExprs(const QueryGraphCollection& collection,
     const expression_vector& predicates, Schema* outerSchema) {
     expression_vector result;
     for (auto& predicate : predicates) {
@@ -34,36 +34,36 @@ void Planner::planOptionalMatch(const QueryGraphCollection& queryGraphCollection
         appendAccumulate(AccumulateType::OPTIONAL_, leftPlan);
         return;
     }
-    auto correlatedExpressions =
-        getCorrelatedExpressions(queryGraphCollection, predicates, leftPlan.getSchema());
-    if (correlatedExpressions.empty()) {
+    auto corExprs =
+        getCorrelatedExprs(queryGraphCollection, predicates, leftPlan.getSchema());
+    if (corExprs.empty()) {
         // No join condition, apply cross product.
         auto rightPlan = planQueryGraphCollection(queryGraphCollection, predicates);
         appendCrossProduct(AccumulateType::OPTIONAL_, leftPlan, *rightPlan);
         return;
     }
     bool isInternalIDCorrelated = ExpressionUtil::isExpressionsWithDataType(
-        correlatedExpressions, LogicalTypeID::INTERNAL_ID);
+        corExprs, LogicalTypeID::INTERNAL_ID);
     std::unique_ptr<LogicalPlan> rightPlan;
     if (isInternalIDCorrelated) {
         // If all correlated expressions are node IDs. We can trivially unnest by scanning internal
         // ID in both outer and inner plan as these are fast in-memory operations. For node
         // properties, we only scan in the outer query.
         rightPlan = planQueryGraphCollectionInNewContext(SubqueryType::INTERNAL_ID_CORRELATED,
-            correlatedExpressions, leftPlan.getCardinality(), queryGraphCollection, predicates);
+            corExprs, leftPlan.getCardinality(), queryGraphCollection, predicates);
     } else {
         // Unnest using ExpressionsScan which scans the accumulated table on probe side.
         rightPlan = planQueryGraphCollectionInNewContext(SubqueryType::CORRELATED,
-            correlatedExpressions, leftPlan.getCardinality(), queryGraphCollection, predicates);
-        appendAccumulate(AccumulateType::REGULAR, correlatedExpressions, leftPlan);
+            corExprs, leftPlan.getCardinality(), queryGraphCollection, predicates);
+        appendAccumulate(AccumulateType::REGULAR, corExprs, leftPlan);
     }
-    appendHashJoin(correlatedExpressions, JoinType::LEFT, leftPlan, *rightPlan);
+    appendHashJoin(corExprs, JoinType::LEFT, leftPlan, *rightPlan);
 }
 
 void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
     const expression_vector& predicates, LogicalPlan& leftPlan) {
-    auto correlatedExpressions =
-        getCorrelatedExpressions(queryGraphCollection, predicates, leftPlan.getSchema());
+    auto corExprs =
+        getCorrelatedExprs(queryGraphCollection, predicates, leftPlan.getSchema());
     expression_vector predicatesToPushDown, predicatesToPullUp;
     // E.g. MATCH (a) WITH COUNT(*) AS s MATCH (b) WHERE b.age > s
     // "b.age > s" should be pulled up after both MATCH clauses are joined.
@@ -74,11 +74,10 @@ void Planner::planRegularMatch(const QueryGraphCollection& queryGraphCollection,
             predicatesToPullUp.push_back(predicate);
         }
     }
-    auto joinNodeIDs = ExpressionUtil::getExpressionsWithDataType(
-        correlatedExpressions, LogicalTypeID::INTERNAL_ID);
+    auto joinNodeIDs = ExpressionUtil::getExpressionsWithDataType(corExprs, LogicalTypeID::INTERNAL_ID);
     std::unique_ptr<LogicalPlan> rightPlan;
     if (joinNodeIDs.empty()) {
-        rightPlan = planQueryGraphCollectionInNewContext(SubqueryType::NONE, correlatedExpressions,
+        rightPlan = planQueryGraphCollectionInNewContext(SubqueryType::NONE, corExprs,
             leftPlan.getCardinality(), queryGraphCollection, predicatesToPushDown);
         appendCrossProduct(AccumulateType::REGULAR, leftPlan, *rightPlan);
     } else {

@@ -93,6 +93,7 @@ bool TestRunner::checkLogicalPlans(std::unique_ptr<PreparedStatement>& preparedS
 
 bool TestRunner::checkLogicalPlan(std::unique_ptr<PreparedStatement>& preparedStatement,
     TestStatement* statement, Connection& conn, uint32_t planIdx) {
+    auto a = preparedStatement->logicalPlans[planIdx]->toString();
     auto result = conn.executeAndAutoCommitIfNecessaryNoLock(preparedStatement.get(), planIdx);
     if (statement->expectedError) {
         std::string expectedError = StringUtils::rtrim(result->getErrorMessage());

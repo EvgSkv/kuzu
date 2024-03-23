@@ -65,6 +65,12 @@ void Planner::planMergeClause(const BoundUpdatingClause* updatingClause, Logical
     if (mergeClause->hasPredicate()) {
         predicates = mergeClause->getPredicate()->splitOnAND();
     }
+    if (!plan.isEmpty()) {
+        auto exprsToDistinct = plan.getSchema()->getExprsInScopeRecursive(predicates);
+        if (!exprsToDistinct.empty()) {
+            appendDistinct(exprsToDistinct, plan);
+        }
+    }
     planOptionalMatch(*mergeClause->getQueryGraphCollection(), predicates, plan);
     std::shared_ptr<Expression> mark;
     auto& createInfos = mergeClause->getInsertInfosRef();
