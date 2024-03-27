@@ -338,6 +338,13 @@ public:
     }
 
 private:
+    // When doing batch inserts, prepareCommit needs to be run before the COPY TABLE record is
+    // logged to the WAL file, since the index is reloaded when that record is replayed. However
+    // prepareCommit will also be run later, and the local storage can't cleared from the
+    // HashIndices until checkpointing is done, and entries will get added twice if
+    // HashIndex::prepareCommit is run twice. It seems simplest to just track whether or not
+    // prepareCommit has been run.
+    bool hasRunPrepareCommit;
     common::PhysicalTypeID keyDataTypeID;
     std::shared_ptr<BMFileHandle> fileHandle;
     std::unique_ptr<OverflowFile> overflowFile;

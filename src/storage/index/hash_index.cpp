@@ -636,7 +636,7 @@ template class HashIndex<ku_string_t>;
 PrimaryKeyIndex::PrimaryKeyIndex(const DBFileIDAndName& dbFileIDAndName, bool readOnly,
     common::PhysicalTypeID keyDataType, BufferManager& bufferManager, WAL* wal,
     VirtualFileSystem* vfs)
-    : keyDataTypeID(keyDataType) {
+    : keyDataTypeID(keyDataType), hasRunPrepareCommit{false} {
     fileHandle = bufferManager.getBMFileHandle(dbFileIDAndName.fName,
         readOnly ? FileHandle::O_PERSISTENT_FILE_READ_ONLY :
                    FileHandle::O_PERSISTENT_FILE_NO_CREATE,
@@ -713,6 +713,7 @@ void PrimaryKeyIndex::checkpointInMemory() {
     if (overflowFile) {
         overflowFile->checkpointInMemory();
     }
+    hasRunPrepareCommit = false;
 }
 
 void PrimaryKeyIndex::rollbackInMemory() {
@@ -722,14 +723,18 @@ void PrimaryKeyIndex::rollbackInMemory() {
     if (overflowFile) {
         overflowFile->rollbackInMemory();
     }
+    hasRunPrepareCommit = false;
 }
 
 void PrimaryKeyIndex::prepareCommit() {
-    for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
-        hashIndices[i]->prepareCommit();
-    }
-    if (overflowFile) {
-        overflowFile->prepareCommit();
+    if (!hasRunPrepareCommit) {
+        for (auto i = 0u; i < NUM_HASH_INDEXES; i++) {
+            hashIndices[i]->prepareCommit();
+        }
+        if (overflowFile) {
+            overflowFile->prepareCommit();
+        }
+        hasRunPrepareCommit = true;
     }
 }
 
