@@ -1,5 +1,7 @@
 #pragma once
 
+#include <memory>
+
 #include "common/static_vector.h"
 #include "common/type_utils.h"
 #include "common/types/internal_id_t.h"
@@ -72,7 +74,7 @@ public:
         typename std::conditional<std::same_as<T, common::ku_string_t>, std::string_view, T>::type;
     bool lookup(Key key, common::offset_t& result);
 
-    uint64_t size() { return this->indexHeader->numEntries; }
+    uint64_t size() { return this->indexHeader.numEntries; }
 
     void forEach(std::function<void(slot_id_t, uint8_t, SlotEntry<T>)> func);
     std::string toString();
@@ -125,6 +127,12 @@ public:
         return false;
     }
 
+    inline void clear() {
+        indexHeader = HashIndexHeader();
+        pSlots = std::make_unique<InMemDiskArrayBuilder<Slot<T>>>(dummy, 0, 0, true);
+        oSlots = std::make_unique<InMemDiskArrayBuilder<Slot<T>>>(dummy, 0, 1, true);
+    }
+
     // TODO: this will use almost as much memory as the entire index including already written
     // values and new values Replacing with a vector<vector<tuple<S, offset_t, hash_t>>> will be
     // much more memory efficient (24 bytes per primary slot instead of 256), though I'm not sure if
@@ -140,9 +148,9 @@ public:
     // invalid But the iterator could just store the slot info; access into vector is fast
     OverflowFileHandle* overflowFileHandle;
     FileHandle dummy;
-    InMemDiskArrayBuilder<Slot<T>> pSlots;
-    InMemDiskArrayBuilder<Slot<T>> oSlots;
-    std::unique_ptr<HashIndexHeader> indexHeader;
+    std::unique_ptr<InMemDiskArrayBuilder<Slot<T>>> pSlots;
+    std::unique_ptr<InMemDiskArrayBuilder<Slot<T>>> oSlots;
+    HashIndexHeader indexHeader;
 };
 
 template<>

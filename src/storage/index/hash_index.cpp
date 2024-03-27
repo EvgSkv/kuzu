@@ -15,6 +15,7 @@
 #include "common/types/ku_string.h"
 #include "common/types/types.h"
 #include "common/vector/value_vector.h"
+#include "storage/index/hash_index_builder.h"
 #include "storage/index/hash_index_header.h"
 #include "storage/index/hash_index_slot.h"
 #include "storage/index/hash_index_utils.h"
@@ -278,22 +279,22 @@ void HashIndex<T>::prepareCommit() {
             [this](
                 Key key, offset_t value) -> void { this->insertIntoPersistentIndex(key, value); });
         headerArray->update(INDEX_HEADER_IDX_IN_ARRAY, *indexHeaderForWriteTrx);
-        headerArray->prepareCommit();
-        pSlots->prepareCommit();
-        oSlots->prepareCommit();
     }
     if (bulkInsertLocalStorage.size() > 0) {
         wal->addToUpdatedTables(dbFileIDAndName.dbFileID.nodeIndexID.tableID);
         mergeBulkInserts();
         headerArray->update(INDEX_HEADER_IDX_IN_ARRAY, *indexHeaderForWriteTrx);
     }
+    headerArray->prepareCommit();
+    pSlots->prepareCommit();
+    oSlots->prepareCommit();
 }
 
 template<typename T>
 // Checks that everything in the bulkInsertLocalStorage can be found in the index
 // Only meaningful if called after mergeBulkInserts and before checkpointing.
 void HashIndex<T>::validateBulkInserts() {
-    for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots.size(); slotId++) {
+    for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots->size(); slotId++) {
         auto localSlot =
             typename HashIndexBuilder<T>::SlotIterator(slotId, &bulkInsertLocalStorage);
         do {
@@ -340,6 +341,7 @@ void HashIndex<T>::checkpointInMemory() {
     if constexpr (std::same_as<ku_string_t, T>) {
         overflowFileHandle->checkpointInMemory();
     }
+    bulkInsertLocalStorage.clear();
 }
 
 template<typename T>
@@ -468,15 +470,15 @@ void HashIndex<T>::mergeBulkInserts() {
     reserve(bulkInsertLocalStorage.size());
     // TODO: Remove; they should be equivalent after reserve
     KU_ASSERT(
-        bulkInsertLocalStorage.pSlots.size() == pSlots->getNumElements(TransactionType::WRITE));
+        bulkInsertLocalStorage.pSlots->size() == pSlots->getNumElements(TransactionType::WRITE));
     KU_ASSERT(this->indexHeaderForWriteTrx->currentLevel ==
-              bulkInsertLocalStorage.indexHeader->currentLevel);
+              bulkInsertLocalStorage.indexHeader.currentLevel);
     KU_ASSERT(this->indexHeaderForWriteTrx->levelHashMask ==
-              bulkInsertLocalStorage.indexHeader->levelHashMask);
+              bulkInsertLocalStorage.indexHeader.levelHashMask);
     KU_ASSERT(this->indexHeaderForWriteTrx->higherLevelHashMask ==
-              bulkInsertLocalStorage.indexHeader->higherLevelHashMask);
+              bulkInsertLocalStorage.indexHeader.higherLevelHashMask);
     KU_ASSERT(this->indexHeaderForWriteTrx->nextSplitSlotId ==
-              bulkInsertLocalStorage.indexHeader->nextSplitSlotId);
+              bulkInsertLocalStorage.indexHeader.nextSplitSlotId);
 
     auto originalNumEntries = this->indexHeaderForWriteTrx->numEntries;
 
@@ -498,7 +500,7 @@ void HashIndex<T>::mergeBulkInserts() {
     // accessed slots we just benefit from the interface. However, the two iterators would not be
     // able to pin the same page simultaneously
     auto diskOverflowSlotIterator = oSlots->iter();
-    for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots.size(); slotId++) {
+    for (uint64_t slotId = 0; slotId < bulkInsertLocalStorage.pSlots->size(); slotId++) {
         auto localSlot =
             typename HashIndexBuilder<T>::SlotIterator(slotId, &bulkInsertLocalStorage);
         // If mask is empty, skip this slot
@@ -551,7 +553,7 @@ void HashIndex<T>::mergeBulkInserts() {
             }
         } while (bulkInsertLocalStorage.nextChainedSlot(localSlot));
     }
-    KU_ASSERT(originalNumEntries + bulkInsertLocalStorage.indexHeader->numEntries ==
+    KU_ASSERT(originalNumEntries + bulkInsertLocalStorage.indexHeader.numEntries ==
               indexHeaderForWriteTrx->numEntries);
 }
 
