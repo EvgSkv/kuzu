@@ -54,6 +54,7 @@ struct PIP {
     common::page_idx_t nextPipPageIdx;
     common::page_idx_t pageIdxs[NUM_PAGE_IDXS_PER_PIP];
 };
+static_assert(sizeof(PIP) == common::BufferPoolConstants::PAGE_4KB_SIZE);
 
 struct PIPWrapper {
     PIPWrapper(FileHandle& fileHandle, common::page_idx_t pipPageIdx);
@@ -65,15 +66,14 @@ struct PIPWrapper {
 };
 
 struct PIPUpdates {
-    // updatedPipIdxs stores the idx's of existing PIPWrappers (not the physical pageIdx of those
-    // PIPs), which are stored in the pipPageIdx field of PIPWrapper. These are used to replace the
-    // PIPWrappers quickly during in-memory checkpointing.
-    std::unordered_set<uint64_t> updatedPipIdxs;
-    std::vector<common::page_idx_t> pipPageIdxsOfInsertedPIPs;
+    // Since PIPs are only appended to, the only existing PIP which may be modified is the last one
+    // This gets tracked separately to make indexing into newPIPs simpler.
+    std::optional<PIPWrapper> updatedLastPIP;
+    std::vector<PIPWrapper> newPIPs;
 
     inline void clear() {
-        updatedPipIdxs.clear();
-        pipPageIdxsOfInsertedPIPs.clear();
+        updatedLastPIP.reset();
+        newPIPs.clear();
     }
 };
 
