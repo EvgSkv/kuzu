@@ -3,6 +3,7 @@
 #include "transaction/transaction_context.h"
 
 using namespace kuzu::common;
+using namespace kuzu::transaction;
 
 namespace kuzu {
 namespace processor {
@@ -15,10 +16,10 @@ bool Transaction::getNextTuplesInternal(ExecutionContext* context) {
     auto transactionContext = context->clientContext->getTransactionContext();
     switch (transactionAction) {
     case transaction::TransactionAction::BEGIN_READ: {
-        transactionContext->beginReadTransaction();
+        transactionContext->beginTransaction(TransactionType::READ_ONLY);
     } break;
     case transaction::TransactionAction::BEGIN_WRITE: {
-        transactionContext->beginWriteTransaction();
+        transactionContext->beginTransaction(TransactionType::WRITE);
     } break;
     case transaction::TransactionAction::COMMIT: {
         transactionContext->commit();

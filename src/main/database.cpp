@@ -201,14 +201,14 @@ void Database::dropLoggers() {
     LoggerUtils::dropLogger(LoggerConstants::LoggerEnum::WAL);
 }
 
-void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRecovery) {
-    if (transaction->isReadOnly()) {
-        transactionManager->commit(transaction);
-        return;
-    }
-    KU_ASSERT(transaction->isWriteTransaction());
-    catalog->prepareCommitOrRollback(TransactionAction::COMMIT);
-    storageManager->prepareCommit(transaction);
+//void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRecovery) {
+//    if (transaction->isReadOnly()) {
+//        transactionManager->commitTransaction(transaction);
+//        return;
+//    }
+//    KU_ASSERT(transaction->isWriteTransaction());
+//    catalog->prepareCommitOrRollback(TransactionAction::COMMIT);
+//    storageManager->prepareCommit(transaction);
     // Note: It is enough to stop and wait transactions to leave the system instead of
     // for example checking on the query processor's task scheduler. This is because the
     // first and last steps that a connection performs when executing a query is to
@@ -216,45 +216,44 @@ void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRec
     // will only return results or error after all threads working on the tasks of a
     // query stop working on the tasks of the query and these tasks are removed from the
     // query.
-    transactionManager->stopNewTransactionsAndWaitUntilAllReadTransactionsLeave();
+//    transactionManager->stopNewTransactionsAndWaitUntilAllReadTransactionsLeave();
     // Note: committing and stopping new transactions can be done in any order. This
     // order allows us to throw exceptions if we have to wait a lot to stop.
-    transactionManager->commitButKeepActiveWriteTransaction(transaction);
-    wal->flushAllPages();
-    if (skipCheckpointForTestingRecovery) {
-        transactionManager->allowReceivingNewTransactions();
-        return;
-    }
-    checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT);
-    transactionManager->manuallyClearActiveWriteTransaction(transaction);
-    transactionManager->allowReceivingNewTransactions();
-}
+//    transactionManager->commitTransaction(transaction);
+//    wal->flushAllPages();
+//    if (skipCheckpointForTestingRecovery) {
+//        transactionManager->allowReceivingNewTransactions();
+//        return;
+//    }
+//    checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT);
+//    transactionManager->allowReceivingNewTransactions();
+//}
 
-void Database::rollback(
-    transaction::Transaction* transaction, bool skipCheckpointForTestingRecovery) {
-    if (transaction->isReadOnly()) {
-        transactionManager->rollback(transaction);
-        return;
-    }
-    KU_ASSERT(transaction->isWriteTransaction());
-    catalog->prepareCommitOrRollback(TransactionAction::ROLLBACK);
-    storageManager->prepareRollback(transaction);
-    if (skipCheckpointForTestingRecovery) {
-        wal->flushAllPages();
-        return;
-    }
-    rollbackAndClearWAL();
-    transactionManager->manuallyClearActiveWriteTransaction(transaction);
-}
+//void Database::rollback(
+//    transaction::Transaction* transaction, bool skipCheckpointForTestingRecovery) {
+//    if (transaction->isReadOnly()) {
+//        transactionManager->rollbackTransaction(transaction);
+//        return;
+//    }
+//    KU_ASSERT(transaction->isWriteTransaction());
+//    catalog->prepareCommitOrRollback(TransactionAction::ROLLBACK);
+//    storageManager->prepareRollback(transaction);
+//    if (skipCheckpointForTestingRecovery) {
+//        wal->flushAllPages();
+//        return;
+//    }
+//    rollbackAndClearWAL();
+    //    transactionManager->manuallyClearActiveWriteTransaction(transaction);
+//}
 
-void Database::checkpointAndClearWAL(WALReplayMode replayMode) {
-    KU_ASSERT(replayMode == WALReplayMode::COMMIT_CHECKPOINT ||
-              replayMode == WALReplayMode::RECOVERY_CHECKPOINT);
-    auto walReplayer = std::make_unique<WALReplayer>(
-        wal.get(), storageManager.get(), bufferManager.get(), catalog.get(), replayMode, vfs.get());
-    walReplayer->replay();
-    wal->clearWAL();
-}
+//void Database::checkpointAndClearWAL(WALReplayMode replayMode) {
+//    KU_ASSERT(replayMode == WALReplayMode::COMMIT_CHECKPOINT ||
+//              replayMode == WALReplayMode::RECOVERY_CHECKPOINT);
+//    auto walReplayer = std::make_unique<WALReplayer>(
+//        wal.get(), storageManager.get(), bufferManager.get(), catalog.get(), replayMode, vfs.get());
+//    walReplayer->replay();
+//    wal->clearWAL();
+//}
 
 void Database::rollbackAndClearWAL() {
     auto walReplayer = std::make_unique<WALReplayer>(wal.get(), storageManager.get(),
@@ -267,7 +266,11 @@ void Database::recoverIfNecessary() {
     if (!wal->isEmptyWAL()) {
         logger->info("Starting up StorageManager and found a non-empty WAL with a committed "
                      "transaction. Replaying to checkpointInMemory.");
-        checkpointAndClearWAL(WALReplayMode::RECOVERY_CHECKPOINT);
+        auto walReplayer = std::make_unique<WALReplayer>(wal.get(), storageManager.get(),
+            bufferManager.get(), catalog.get(), WALReplayMode::RECOVERY_CHECKPOINT, vfs.get());
+        walReplayer->replay();
+        wal->clearWAL();
+        //        checkpointAndClearWAL(WALReplayMode::RECOVERY_CHECKPOINT);
     }
 }
 

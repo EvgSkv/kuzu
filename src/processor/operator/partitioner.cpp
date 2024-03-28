@@ -38,10 +38,8 @@ static partition_idx_t getNumPartitions(offset_t maxOffset) {
 
 void PartitionerSharedState::initialize(std::vector<std::unique_ptr<PartitioningInfo>>& infos) {
     maxNodeOffsets.resize(2);
-    maxNodeOffsets[0] =
-        srcNodeTable->getMaxNodeOffset(transaction::Transaction::getDummyWriteTrx().get());
-    maxNodeOffsets[1] =
-        dstNodeTable->getMaxNodeOffset(transaction::Transaction::getDummyWriteTrx().get());
+    maxNodeOffsets[0] = srcNodeTable->getMaxNodeOffset(&transaction::DUMMY_WRITE_TRANSACTION);
+    maxNodeOffsets[1] = dstNodeTable->getMaxNodeOffset(&transaction::DUMMY_WRITE_TRANSACTION);
     numPartitions.resize(2);
     numPartitions[0] = getNumPartitions(maxNodeOffsets[0]);
     numPartitions[1] = getNumPartitions(maxNodeOffsets[1]);

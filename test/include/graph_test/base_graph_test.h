@@ -84,15 +84,15 @@ protected:
         return database.systemConfig.bufferPoolSize;
     }
     static inline storage::WAL* getWAL(main::Database& database) { return database.wal.get(); }
-    static inline void commitAndCheckpointOrRollback(main::Database& database,
-        transaction::Transaction* writeTransaction, bool isCommit,
-        bool skipCheckpointForTestingRecovery = false) {
-        if (isCommit) {
-            database.commit(writeTransaction, skipCheckpointForTestingRecovery);
-        } else {
-            database.rollback(writeTransaction, skipCheckpointForTestingRecovery);
-        }
-    }
+//    static inline void commitAndCheckpointOrRollback(main::Database& database,
+//        transaction::Transaction* writeTransaction, bool isCommit,
+//        bool skipCheckpointForTestingRecovery = false) {
+//        if (isCommit) {
+//            database.commit(writeTransaction, skipCheckpointForTestingRecovery);
+//        } else {
+//            database.rollback(writeTransaction, skipCheckpointForTestingRecovery);
+//        }
+//    }
     static inline processor::QueryProcessor* getQueryProcessor(main::Database& database) {
         return database.queryProcessor.get();
     }

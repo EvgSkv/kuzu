@@ -16,25 +16,19 @@ TransactionContext::TransactionContext(main::ClientContext& clientContext)
 
 TransactionContext::~TransactionContext() {
     if (activeTransaction) {
-        clientContext.getDatabase()->transactionManager->rollback(activeTransaction.get());
+        clientContext.getDatabase()->transactionManager->rollbackTransaction(activeTransaction);
     }
 }
 
-void TransactionContext::beginReadTransaction() {
+void TransactionContext::beginTransaction(TransactionType transactionType) {
     std::unique_lock<std::mutex> lck{mtx};
     mode = TransactionMode::MANUAL;
-    beginTransactionInternal(TransactionType::READ_ONLY);
-}
-
-void TransactionContext::beginWriteTransaction() {
-    std::unique_lock<std::mutex> lck{mtx};
-    mode = TransactionMode::MANUAL;
-    beginTransactionInternal(TransactionType::WRITE);
+    beginTransactionInternal(transactionType);
 }
 
 void TransactionContext::beginAutoTransaction(bool readOnlyStatement) {
     if (mode == TransactionMode::AUTO && hasActiveTransaction()) {
-        activeTransaction.reset();
+        activeTransaction = nullptr;
     }
     beginTransactionInternal(
         readOnlyStatement ? TransactionType::READ_ONLY : TransactionType::WRITE);
@@ -74,8 +68,9 @@ void TransactionContext::commitInternal(bool skipCheckPointing) {
     if (!hasActiveTransaction()) {
         return;
     }
-    clientContext.getDatabase()->commit(activeTransaction.get(), skipCheckPointing);
-    activeTransaction.reset();
+    clientContext.getDatabase()->transactionManager->commitTransaction(
+        activeTransaction, !skipCheckPointing);
+    activeTransaction = nullptr;
     mode = TransactionMode::AUTO;
 }
 
@@ -83,8 +78,9 @@ void TransactionContext::rollbackInternal(bool skipCheckPointing) {
     if (!hasActiveTransaction()) {
         return;
     }
-    clientContext.getDatabase()->rollback(activeTransaction.get(), skipCheckPointing);
-    activeTransaction.reset();
+    clientContext.getDatabase()->transactionManager->rollbackTransaction(
+        activeTransaction, !skipCheckPointing);
+    activeTransaction = nullptr;
     mode = TransactionMode::AUTO;
 }
 
@@ -96,19 +92,8 @@ void TransactionContext::beginTransactionInternal(TransactionType transactionTyp
             "transactions, please open other connections. Current active transaction is "
             "not affected by this exception and can still be used.");
     }
-    switch (transactionType) {
-    case TransactionType::READ_ONLY: {
-        activeTransaction =
-            clientContext.getDatabase()->transactionManager->beginReadOnlyTransaction(
-                clientContext);
-    } break;
-    case TransactionType::WRITE: {
-        activeTransaction =
-            clientContext.getDatabase()->transactionManager->beginWriteTransaction(clientContext);
-    } break;
-    default:
-        KU_UNREACHABLE;
-    }
+    activeTransaction = &clientContext.getDatabase()->transactionManager->beginTransaction(
+        clientContext, transactionType);
 }
 
 } // namespace transaction

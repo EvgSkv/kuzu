@@ -34,8 +34,7 @@ public:
 
     inline bool isAutoTransaction() const { return mode == TransactionMode::AUTO; }
 
-    void beginReadTransaction();
-    void beginWriteTransaction();
+    void beginTransaction(TransactionType transactionType);
     void beginAutoTransaction(bool readOnlyStatement);
     void validateManualTransaction(bool allowActiveTransaction, bool readOnlyStatement);
 
@@ -46,7 +45,7 @@ public:
 
     inline TransactionMode getTransactionMode() const { return mode; }
     inline bool hasActiveTransaction() const { return activeTransaction != nullptr; }
-    inline Transaction* getActiveTransaction() const { return activeTransaction.get(); }
+    inline Transaction* getActiveTransaction() const { return activeTransaction; }
 
 private:
     void commitInternal(bool skipCheckPointing);
@@ -59,7 +58,7 @@ private:
     std::mutex mtx;
     main::ClientContext& clientContext;
     TransactionMode mode;
-    std::unique_ptr<Transaction> activeTransaction;
+    Transaction* activeTransaction;
 };
 
 } // namespace transaction

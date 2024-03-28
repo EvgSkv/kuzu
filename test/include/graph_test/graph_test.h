@@ -46,7 +46,7 @@ public:
 
     inline void runTest(const std::vector<std::unique_ptr<TestStatement>>& statements,
         uint64_t checkpointWaitTimeout =
-            common::DEFAULT_CHECKPOINT_WAIT_TIMEOUT_FOR_TRANSACTIONS_TO_LEAVE_IN_MICROS,
+            common::DEFAULT_CHECKPOINT_WAIT_TIMEOUT_IN_MICROS,
         std::set<std::string> connNames = std::set<std::string>()) {
         for (auto& statement : statements) {
             // special for testing import and export test cases

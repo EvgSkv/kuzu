@@ -18,6 +18,8 @@ class StorageManager;
 enum class WALReplayMode : uint8_t { COMMIT_CHECKPOINT, ROLLBACK, RECOVERY_CHECKPOINT };
 
 // Note: This class is not thread-safe.
+// TODO(Guodong): [MVCC] We should move the logic of rollback outside wal replaer.
+//                Rollback should only done by transaction.
 class WALReplayer {
 public:
     WALReplayer(WAL* wal, StorageManager* storageManager, BufferManager* bufferManager,

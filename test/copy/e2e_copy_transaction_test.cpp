@@ -108,17 +108,15 @@ public:
     }
 
     void validateDatabaseStateBeforeCheckPointCopyRel(table_id_t tableID) {
-        auto dummyWriteTrx = transaction::Transaction::getDummyWriteTrx();
         ASSERT_EQ(getStorageManager(*database)->getRelsStatistics()->getNextRelOffset(
-                      dummyWriteTrx.get(), tableID),
+                      &DUMMY_WRITE_TRANSACTION, tableID),
             6);
     }
 
     void validateDatabaseStateAfterCheckPointCopyRel(table_id_t knowsTableID) {
         validateTinysnbKnowsDateProperty();
         auto relsStatistics = getStorageManager(*database)->getRelsStatistics();
-        auto dummyWriteTrx = transaction::Transaction::getDummyWriteTrx();
-        ASSERT_EQ(relsStatistics->getNextRelOffset(dummyWriteTrx.get(), knowsTableID), 6);
+        ASSERT_EQ(relsStatistics->getNextRelOffset(&DUMMY_WRITE_TRANSACTION, knowsTableID), 6);
         ASSERT_EQ(relsStatistics->getReadOnlyVersion()->tableStatisticPerTable.size(), 1);
         auto knowsRelStatistics = (RelTableStats*)relsStatistics->getReadOnlyVersion()
                                       ->tableStatisticPerTable.at(knowsTableID)

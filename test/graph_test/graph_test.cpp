@@ -35,7 +35,7 @@ void DBTest::createDB(uint64_t checkpointWaitTimeout) {
         database.reset();
     }
     database = std::make_unique<main::Database>(databasePath, *systemConfig);
-    getTransactionManager(*database)->setCheckPointWaitTimeoutForTransactionsToLeaveInMicros(
+    getTransactionManager(*database)->setCheckpointWaitTimeoutInMicros(
         checkpointWaitTimeout /* 10ms */);
     spdlog::set_level(spdlog::level::info);
 }

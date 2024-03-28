@@ -30,11 +30,10 @@ void StorageDriver::scan(const std::string& nodeName, const std::string& propert
     std::vector<std::thread> threads;
     auto numElementsPerThread = size / numThreads + 1;
     auto sizeLeft = size;
-    auto dummyReadOnlyTransaction = Transaction::getDummyReadOnlyTrx();
     while (sizeLeft > 0) {
         uint64_t sizeToRead = std::min(numElementsPerThread, sizeLeft);
-        threads.emplace_back(&StorageDriver::scanColumn, this, dummyReadOnlyTransaction.get(),
-            column, offsets, sizeToRead, current_buffer);
+        threads.emplace_back(&StorageDriver::scanColumn, this, &DUMMY_READ_TRANSACTION, column,
+            offsets, sizeToRead, current_buffer);
         offsets += sizeToRead;
         // TODO(Guodong/Xiyang/Chang): StorageDriver should figure numBytesPerValue from logicalType
         // and not rely on Column to provide this information.
@@ -56,8 +55,8 @@ uint64_t StorageDriver::getNumNodes(const std::string& nodeName) {
 
 uint64_t StorageDriver::getNumRels(const std::string& relName) {
     auto relTableID = catalog->getTableID(&DUMMY_READ_TRANSACTION, relName);
-    auto relStatistics = storageManager->getRelsStatistics()->getRelStatistics(
-        relTableID, Transaction::getDummyReadOnlyTrx().get());
+    auto relStatistics =
+        storageManager->getRelsStatistics()->getRelStatistics(relTableID, &DUMMY_READ_TRANSACTION);
     return relStatistics->getNumTuples();
 }
 

@@ -3,100 +3,157 @@
 #include <thread>
 
 #include "common/exception/transaction_manager.h"
+#include "storage/wal_replayer.h"
 
 using namespace kuzu::common;
+using namespace kuzu::main;
 
 namespace kuzu {
 namespace transaction {
 
-std::unique_ptr<Transaction> TransactionManager::beginWriteTransaction(
-    main::ClientContext& clientContext) {
+Transaction& TransactionManager::beginTransaction(
+    ClientContext& clientContext, TransactionType type) {
     // We obtain the lock for starting new transactions. In case this cannot be obtained this
     // ensures calls to other public functions is not restricted.
-    lock_t newTransactionLck{mtxForStartingNewTransactions};
-    lock_t publicFunctionLck{mtxForSerializingPublicFunctionCalls};
+    std::unique_lock<std::mutex> txnLock{transactionIDMtx};
+    std::unique_lock<std::mutex> txnMgrLock{transactionManagerMtx};
+    switch (type) {
+    case TransactionType::WRITE: {
+        return beginWriteTransactionNoLock(clientContext);
+    } break;
+    case TransactionType::READ_ONLY: {
+        return beginReadOnlyTransactionNoLock(clientContext);
+    } break;
+    default: {
+        KU_UNREACHABLE;
+    }
+    }
+}
+
+Transaction& TransactionManager::beginWriteTransactionNoLock(ClientContext& clientContext) {
     if (hasActiveWriteTransactionNoLock()) {
         throw TransactionManagerException(
             "Cannot start a new write transaction in the system. Only one write transaction at a "
             "time is allowed in the system.");
     }
-    auto transaction =
-        std::make_unique<Transaction>(clientContext, TransactionType::WRITE, ++lastTransactionID);
-    activeWriteTransactionID = lastTransactionID;
-    return transaction;
+    activeWriteTransaction = std::make_unique<Transaction>(
+        clientContext, TransactionType::WRITE, ++currentTransactionID);
+    return *activeWriteTransaction;
 }
 
-std::unique_ptr<Transaction> TransactionManager::beginReadOnlyTransaction(
-    main::ClientContext& clientContext) {
-    // We obtain the lock for starting new transactions. In case this cannot be obtained this
-    // ensures calls to other public functions is not restricted.
-    lock_t newTransactionLck{mtxForStartingNewTransactions};
-    lock_t publicFunctionLck{mtxForSerializingPublicFunctionCalls};
+Transaction& TransactionManager::beginReadOnlyTransactionNoLock(ClientContext& clientContext) {
     auto transaction = std::make_unique<Transaction>(
-        clientContext, TransactionType::READ_ONLY, ++lastTransactionID);
-    activeReadOnlyTransactionIDs.insert(transaction->getID());
-    return transaction;
+        clientContext, TransactionType::READ_ONLY, ++currentTransactionID);
+    auto& ref = *transaction;
+    activeReadOnlyTransactions.insert(std::move(transaction));
+    return ref;
 }
 
-void TransactionManager::commitButKeepActiveWriteTransaction(Transaction* transaction) {
-    lock_t lck{mtxForSerializingPublicFunctionCalls};
-    commitOrRollbackNoLock(transaction, true /* is commit */);
-}
+// void TransactionManager::commitButKeepActiveWriteTransaction(Transaction* transaction) {
+//    std::unique_lock<std::mutex> lck{transactionManagerMtx};
+//    if (transaction->isReadOnly()) {
+//        for (auto& txn : activeReadOnlyTransactions) {
+//            if (txn.get() == transaction) {
+//                activeReadOnlyTransactions.erase(txn);
+//                return;
+//            }
+//        }
+//        return;
+//    }
+//    checkActiveWriteTransactionNoLock(transaction);
+//    wal.logCommit(transaction->getID());
+//}
 
-void TransactionManager::manuallyClearActiveWriteTransaction(Transaction* transaction) {
-    lock_t lck{mtxForSerializingPublicFunctionCalls};
-    assertActiveWriteTransactionIsCorrectNoLock(transaction);
-    clearActiveWriteTransactionIfWriteTransactionNoLock(transaction);
-}
+// void TransactionManager::manuallyClearActiveWriteTransaction(Transaction* transaction) {
+//    std::unique_lock<std::mutex> lck{transactionManagerMtx};
+//    checkActiveWriteTransactionNoLock(transaction);
+//    clearActiveWriteTransactionIfWriteTransactionNoLock(transaction);
+//}
 
-void TransactionManager::commitOrRollbackNoLock(Transaction* transaction, bool isCommit) {
-    if (transaction->isReadOnly()) {
-        activeReadOnlyTransactionIDs.erase(transaction->getID());
-        return;
-    }
-    assertActiveWriteTransactionIsCorrectNoLock(transaction);
-    if (isCommit) {
-        wal.logCommit(transaction->getID());
-        lastCommitID++;
-    }
-}
+// void TransactionManager::commitOrRollbackNoLock(Transaction* transaction, bool isCommit) {
+//    if (transaction->isReadOnly()) {
+//        clearActiveReadTransaction(transaction);
+//        return;
+//    }
+//    checkActiveWriteTransactionNoLock(transaction);
+//    if (isCommit) {
+//        wal.logCommit(transaction->getID());
+//    }
+//}
 
-void TransactionManager::assertActiveWriteTransactionIsCorrectNoLock(
-    Transaction* transaction) const {
-    if (activeWriteTransactionID != transaction->getID()) {
+void TransactionManager::checkActiveWriteTransactionNoLock(Transaction* transaction) const {
+    if (activeWriteTransaction.get() != transaction) {
         throw TransactionManagerException(
             "The ID of the committing write transaction " + std::to_string(transaction->getID()) +
             " is not equal to the ID of the activeWriteTransaction: " +
-            std::to_string(activeWriteTransactionID));
+            std::to_string(activeWriteTransaction->getID()));
     }
 }
 
-void TransactionManager::commit(Transaction* transaction) {
-    lock_t lck{mtxForSerializingPublicFunctionCalls};
-    commitOrRollbackNoLock(transaction, true /* is commit */);
-    clearActiveWriteTransactionIfWriteTransactionNoLock(transaction);
+void TransactionManager::clearActiveReadTransaction(Transaction* transaction) {
+    for (auto& txn : activeReadOnlyTransactions) {
+        if (txn.get() == transaction) {
+            activeReadOnlyTransactions.erase(txn);
+            return;
+        }
+    }
 }
 
-void TransactionManager::rollback(Transaction* transaction) {
-    lock_t lck{mtxForSerializingPublicFunctionCalls};
-    commitOrRollbackNoLock(transaction, false /* is rollback */);
-    clearActiveWriteTransactionIfWriteTransactionNoLock(transaction);
+void TransactionManager::commitTransaction(Transaction* transaction, bool autoCheckpoint) {
+    std::unique_lock<std::mutex> lck{transactionManagerMtx};
+    if (transaction->isReadOnly()) {
+        clearActiveReadTransaction(transaction);
+        return;
+    }
+    transaction->commit();
+    checkActiveWriteTransactionNoLock(transaction);
+    wal.logCommit(transaction->getID());
+    wal.flushAllPages();
+    clearActiveWriteTransactionNoLock();
+    if (autoCheckpoint) {
+        checkpoint(transaction->getClientContext(), storage::WALReplayMode::COMMIT_CHECKPOINT);
+    }
+}
+
+void TransactionManager::rollbackTransaction(Transaction* transaction, bool autoCheckpoint) {
+    std::unique_lock<std::mutex> lck{transactionManagerMtx};
+    if (transaction->isReadOnly()) {
+        clearActiveReadTransaction(transaction);
+        return;
+    }
+    transaction->rollback();
+    checkActiveWriteTransactionNoLock(transaction);
+    if (autoCheckpoint) {
+        checkpoint(transaction->getClientContext(), storage::WALReplayMode::ROLLBACK);
+    }
+    clearActiveWriteTransactionNoLock();
+}
+
+void TransactionManager::checkpoint(
+    ClientContext& clientContext, storage::WALReplayMode replayMode) {
+    stopNewTransactionsAndWaitUntilAllReadTransactionsLeave();
+    auto walReplayer = std::make_unique<storage::WALReplayer>(&wal,
+        clientContext.getStorageManager(), clientContext.getMemoryManager()->getBufferManager(),
+        clientContext.getCatalog(), replayMode, clientContext.getVFSUnsafe());
+    walReplayer->replay();
+    wal.clearWAL();
+    allowReceivingNewTransactions();
 }
 
 void TransactionManager::allowReceivingNewTransactions() {
-    mtxForStartingNewTransactions.unlock();
+    transactionIDMtx.unlock();
 }
 
 void TransactionManager::stopNewTransactionsAndWaitUntilAllReadTransactionsLeave() {
-    mtxForStartingNewTransactions.lock();
-    lock_t lck{mtxForSerializingPublicFunctionCalls};
+    transactionIDMtx.lock();
+    std::unique_lock<std::mutex> lck{transactionManagerMtx};
     uint64_t numTimesWaited = 0;
     while (true) {
-        if (!activeReadOnlyTransactionIDs.empty()) {
+        if (!activeReadOnlyTransactions.empty()) {
             numTimesWaited++;
             if (numTimesWaited * THREAD_SLEEP_TIME_WHEN_WAITING_IN_MICROS >
-                checkPointWaitTimeoutForTransactionsToLeaveInMicros) {
-                mtxForStartingNewTransactions.unlock();
+                checkpointWaitTimeoutInMicros) {
+                transactionIDMtx.unlock();
                 throw TransactionManagerException(
                     "Timeout waiting for read transactions to leave the system before committing "
                     "and checkpointing a write transaction. If you have an open read transaction "

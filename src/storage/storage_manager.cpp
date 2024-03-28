@@ -126,7 +126,6 @@ void StorageManager::dropTable(table_id_t tableID) {
 }
 
 void StorageManager::prepareCommit(transaction::Transaction* transaction) {
-    transaction->getLocalStorage()->prepareCommit();
     // Tables which are created but not inserted into may have pending writes
     // which need to be flushed (specifically, the metadata disk array header)
     // TODO(bmwinger): wal->getUpdatedTables isn't the ideal place to store this information
