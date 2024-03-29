@@ -162,8 +162,9 @@ enum class PhysicalTypeID : uint8_t {
     // Variable size types.
     STRING = 20,
     LIST = 22,
-    STRUCT = 23,
-    POINTER = 24,
+    ARRAY = 23,
+    STRUCT = 24,
+    POINTER = 25,
 };
 
 class LogicalType;
@@ -453,13 +454,13 @@ struct ListType {
 
 struct ArrayType {
     static inline LogicalType* getChildType(const LogicalType* type) {
-        KU_ASSERT(type->getLogicalTypeID() == LogicalTypeID::ARRAY);
+        KU_ASSERT(type->getPhysicalType() == PhysicalTypeID::ARRAY);
         auto arrayTypeInfo = reinterpret_cast<ArrayTypeInfo*>(type->extraTypeInfo.get());
         return arrayTypeInfo->getChildType();
     }
 
     static inline uint64_t getNumElements(const LogicalType* type) {
-        KU_ASSERT(type->getLogicalTypeID() == LogicalTypeID::ARRAY);
+        KU_ASSERT(type->getPhysicalType() == PhysicalTypeID::ARRAY);
         auto arrayTypeInfo = reinterpret_cast<ArrayTypeInfo*>(type->extraTypeInfo.get());
         return arrayTypeInfo->getNumElements();
     }

@@ -127,6 +127,7 @@ void VectorHashFunction::computeHash(ValueVector* operand, ValueVector* result) 
     case PhysicalTypeID::STRUCT: {
         computeStructVecHash(operand, result);
     } break;
+    case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
         computeListVectorHash(operand, result);
     } break;

@@ -126,6 +126,7 @@ static std::shared_ptr<CompressionAlg> getCompression(
         return std::make_shared<IntegerBitpacking<int8_t>>();
     }
     case PhysicalTypeID::INTERNAL_ID:
+    case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST:
     case PhysicalTypeID::UINT64: {
         return std::make_shared<IntegerBitpacking<uint64_t>>();
@@ -183,6 +184,7 @@ void ColumnChunk::initializeFunction() {
     case PhysicalTypeID::INT16:
     case PhysicalTypeID::INT8:
     case PhysicalTypeID::INTERNAL_ID:
+    case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST:
     case PhysicalTypeID::UINT64:
     case PhysicalTypeID::UINT32:
@@ -267,7 +269,8 @@ void ColumnChunk::write(ColumnChunk* chunk, ColumnChunk* dstOffsets, RelMultipli
 // Thus, an assertion is added at the first line.
 void ColumnChunk::write(ValueVector* vector, offset_t offsetInVector, offset_t offsetInChunk) {
     KU_ASSERT(dataType.getPhysicalType() != PhysicalTypeID::BOOL &&
-              dataType.getPhysicalType() != PhysicalTypeID::LIST);
+              dataType.getPhysicalType() != PhysicalTypeID::LIST &&
+              dataType.getPhysicalType() != PhysicalTypeID::ARRAY);
     nullChunk->setNull(offsetInChunk, vector->isNull(offsetInVector));
     if (offsetInChunk >= numValues) {
         numValues = offsetInChunk + 1;
@@ -642,6 +645,7 @@ std::unique_ptr<ColumnChunk> ColumnChunkFactory::createColumnChunk(
         return std::make_unique<StringColumnChunk>(
             std::move(dataType), capacity, enableCompression, inMemory);
     }
+    case PhysicalTypeID::ARRAY:
     case PhysicalTypeID::LIST: {
         return std::make_unique<ListColumnChunk>(
             std::move(dataType), capacity, enableCompression, inMemory);
