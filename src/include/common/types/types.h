@@ -446,7 +446,8 @@ using logical_type_vec_t = std::vector<LogicalType>;
 
 struct ListType {
     static inline LogicalType* getChildType(const LogicalType* type) {
-        KU_ASSERT(type->getPhysicalType() == PhysicalTypeID::LIST);
+        KU_ASSERT(type->getPhysicalType() == PhysicalTypeID::LIST ||
+                  type->getPhysicalType() == PhysicalTypeID::ARRAY);
         auto listTypeInfo = reinterpret_cast<ListTypeInfo*>(type->extraTypeInfo.get());
         return listTypeInfo->getChildType();
     }
