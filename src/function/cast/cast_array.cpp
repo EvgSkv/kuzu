@@ -41,10 +41,12 @@ bool CastArrayHelper::containsListToArray(const LogicalType* srcType, const Logi
     if (checkCompatibleNestedTypes(srcType->getLogicalTypeID(), dstType->getLogicalTypeID())) {
         switch (srcType->getPhysicalType()) {
         case PhysicalTypeID::LIST: {
-            return containsListToArray(ListType::getChildType(srcType), ListType::getChildType(dstType));
+            return containsListToArray(
+                ListType::getChildType(srcType), ListType::getChildType(dstType));
         }
         case PhysicalTypeID::ARRAY: {
-            return containsListToArray(ArrayType::getChildType(srcType), ListType::getChildType(dstType));
+            return containsListToArray(
+                ArrayType::getChildType(srcType), ListType::getChildType(dstType));
         }
         case PhysicalTypeID::STRUCT: {
             auto srcFieldTypes = StructType::getFieldTypes(srcType);
@@ -80,11 +82,11 @@ void CastArrayHelper::validateListEntry(
         if (inputType.getPhysicalType() == PhysicalTypeID::LIST) {
             auto listEntry = inputVector->getValue<list_entry_t>(pos);
             if (listEntry.size != ArrayType::getNumElements(resultType)) {
-                throw ConversionException{stringFormat(
-                    "Unsupported casting LIST with incorrect list entry to ARRAY. "
-                    "Expected: {}, Actual: {}.",
-                    ArrayType::getNumElements(resultType),
-                    inputVector->getValue<list_entry_t>(pos).size)};
+                throw ConversionException{
+                    stringFormat("Unsupported casting LIST with incorrect list entry to ARRAY. "
+                                 "Expected: {}, Actual: {}.",
+                        ArrayType::getNumElements(resultType),
+                        inputVector->getValue<list_entry_t>(pos).size)};
             }
             auto inputChildVector = ListVector::getDataVector(inputVector);
             for (auto i = listEntry.offset; i < listEntry.offset + listEntry.size; i++) {
@@ -104,7 +106,8 @@ void CastArrayHelper::validateListEntry(
         }
     } break;
     case PhysicalTypeID::LIST: {
-        if (inputType.getPhysicalType() == PhysicalTypeID::LIST || inputType.getPhysicalType() == PhysicalTypeID::ARRAY) {
+        if (inputType.getPhysicalType() == PhysicalTypeID::LIST ||
+            inputType.getPhysicalType() == PhysicalTypeID::ARRAY) {
             auto listEntry = inputVector->getValue<list_entry_t>(pos);
             auto inputChildVector = ListVector::getDataVector(inputVector);
             for (auto i = listEntry.offset; i < listEntry.offset + listEntry.size; i++) {

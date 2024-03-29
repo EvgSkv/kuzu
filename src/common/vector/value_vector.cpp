@@ -511,7 +511,8 @@ void StringVector::copyToRowData(const ValueVector* vector, uint32_t pos, uint8_
 }
 
 void ListVector::copyFromRowData(ValueVector* vector, uint32_t pos, const uint8_t* rowData) {
-    KU_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::LIST || vector->dataType.getPhysicalType() == PhysicalTypeID::ARRAY);
+    KU_ASSERT(vector->dataType.getPhysicalType() == PhysicalTypeID::LIST ||
+              vector->dataType.getPhysicalType() == PhysicalTypeID::ARRAY);
     auto& srcKuList = *(ku_list_t*)rowData;
     auto srcNullBytes = reinterpret_cast<uint8_t*>(srcKuList.overflowPtr);
     auto srcListValues = srcNullBytes + NullBuffer::getNumBytesForNullValues(srcKuList.size);
