@@ -153,7 +153,7 @@ void Catalog::dropTableSchema(table_id_t tableID) {
         auto relTableIDs = nodeTableEntry->getRelTableIDs();
         readWriteVersion->dropTable(tableID);
         for (auto relTableID : relTableIDs) {
-            wal->logDropTableRecord(relTableID);
+            wal->logDropTableRecord(relTableID, CatalogEntryType::REL_TABLE_ENTRY);
         }
     } break;
     case CatalogEntryType::RDF_GRAPH_ENTRY: {
@@ -168,15 +168,20 @@ void Catalog::dropTableSchema(table_id_t tableID) {
         readWriteVersion->dropTable(rTableID);
         readWriteVersion->dropTable(lTableID);
         readWriteVersion->dropTable(graphID);
-        wal->logDropTableRecord(rtTableID);
-        wal->logDropTableRecord(ltTableID);
-        wal->logDropTableRecord(rTableID);
-        wal->logDropTableRecord(lTableID);
-        wal->logDropTableRecord(graphID);
+        wal->logDropTableRecord(rtTableID, CatalogEntryType::REL_TABLE_ENTRY);
+        wal->logDropTableRecord(ltTableID, CatalogEntryType::REL_TABLE_ENTRY);
+        wal->logDropTableRecord(rTableID, CatalogEntryType::NODE_TABLE_ENTRY);
+        wal->logDropTableRecord(lTableID, CatalogEntryType::NODE_TABLE_ENTRY);
+        wal->logDropTableRecord(graphID, CatalogEntryType::RDF_GRAPH_ENTRY);
+    } break;
+    case CatalogEntryType::NODE_TABLE_ENTRY:
+    case CatalogEntryType::REL_TABLE_ENTRY: {
+        auto tableType = tableEntry->getType();
+        readWriteVersion->dropTable(tableID);
+        wal->logDropTableRecord(tableID, tableType);
     } break;
     default: {
-        readWriteVersion->dropTable(tableID);
-        wal->logDropTableRecord(tableID);
+        KU_UNREACHABLE;
     }
     }
 }

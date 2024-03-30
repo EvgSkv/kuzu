@@ -1,5 +1,6 @@
 #include "storage/wal/wal.h"
 
+#include "catalog/catalog_entry/catalog_entry_type.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "common/utils.h"
@@ -65,14 +66,16 @@ void WAL::logCatalogRecord() {
 
 void WAL::logCreateNodeTableRecord(table_id_t tableID) {
     lock_t lck{mtx};
-    WALRecord walRecord = WALRecord::newCreateTableRecord(tableID, TableType::NODE);
+    WALRecord walRecord =
+        WALRecord::newCreateTableRecord(tableID, catalog::CatalogEntryType::NODE_TABLE_ENTRY);
     addToUpdatedTables(tableID);
     addNewWALRecordNoLock(walRecord);
 }
 
 void WAL::logCreateRelTableRecord(table_id_t tableID) {
     lock_t lck{mtx};
-    WALRecord walRecord = WALRecord::newCreateTableRecord(tableID, TableType::REL);
+    WALRecord walRecord =
+        WALRecord::newCreateTableRecord(tableID, catalog::CatalogEntryType::REL_TABLE_ENTRY);
     addToUpdatedTables(tableID);
     addNewWALRecordNoLock(walRecord);
 }
@@ -92,9 +95,9 @@ void WAL::logCopyTableRecord(table_id_t tableID) {
     addNewWALRecordNoLock(walRecord);
 }
 
-void WAL::logDropTableRecord(table_id_t tableID) {
+void WAL::logDropTableRecord(table_id_t tableID, catalog::CatalogEntryType tableType) {
     lock_t lck{mtx};
-    WALRecord walRecord = WALRecord::newDropTableRecord(tableID);
+    WALRecord walRecord = WALRecord::newDropTableRecord(tableID, tableType);
     addNewWALRecordNoLock(walRecord);
 }
 

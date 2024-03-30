@@ -1,5 +1,7 @@
 #include "storage/wal/wal_record.h"
 
+#include "catalog/catalog_entry/catalog_entry_type.h"
+
 using namespace kuzu::common;
 
 namespace kuzu {
@@ -160,10 +162,11 @@ WALRecord WALRecord::newCatalogRecord() {
     return retVal;
 }
 
-WALRecord WALRecord::newCreateTableRecord(table_id_t tableID, TableType tableType) {
+WALRecord WALRecord::newCreateTableRecord(
+    table_id_t tableID, catalog::CatalogEntryType catalogEntryType) {
     WALRecord retVal;
     retVal.recordType = WALRecordType::CREATE_TABLE_RECORD;
-    retVal.createTableRecord = CreateTableRecord(tableID, tableType);
+    retVal.createTableRecord = CreateTableRecord(tableID, catalogEntryType);
     return retVal;
 }
 
@@ -171,11 +174,11 @@ WALRecord WALRecord::newRdfGraphRecord(table_id_t rdfGraphID, table_id_t resourc
     table_id_t literalTableID, table_id_t resourceTripleTableID, table_id_t literalTripleTableID) {
     WALRecord retVal;
     retVal.recordType = WALRecordType::CREATE_RDF_GRAPH_RECORD;
-    retVal.rdfGraphRecord =
-        RdfGraphRecord(rdfGraphID, CreateTableRecord(resourceTableID, TableType::NODE),
-            CreateTableRecord(literalTableID, TableType::NODE),
-            CreateTableRecord(resourceTripleTableID, TableType::REL),
-            CreateTableRecord(literalTripleTableID, TableType::REL));
+    retVal.rdfGraphRecord = RdfGraphRecord(rdfGraphID,
+        CreateTableRecord(resourceTableID, catalog::CatalogEntryType::NODE_TABLE_ENTRY),
+        CreateTableRecord(literalTableID, catalog::CatalogEntryType::NODE_TABLE_ENTRY),
+        CreateTableRecord(resourceTripleTableID, catalog::CatalogEntryType::REL_TABLE_ENTRY),
+        CreateTableRecord(literalTripleTableID, catalog::CatalogEntryType::REL_TABLE_ENTRY));
     return retVal;
 }
 
@@ -186,10 +189,10 @@ WALRecord WALRecord::newCopyTableRecord(table_id_t tableID) {
     return retVal;
 }
 
-WALRecord WALRecord::newDropTableRecord(table_id_t tableID) {
+WALRecord WALRecord::newDropTableRecord(table_id_t tableID, catalog::CatalogEntryType tableType) {
     WALRecord retVal;
     retVal.recordType = WALRecordType::DROP_TABLE_RECORD;
-    retVal.dropTableRecord = DropTableRecord(tableID);
+    retVal.dropTableRecord = DropTableRecord(tableID, tableType);
     return retVal;
 }
 

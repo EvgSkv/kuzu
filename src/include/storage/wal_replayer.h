@@ -45,7 +45,6 @@ private:
     void truncateFileIfInsertion(
         BMFileHandle* fileHandle, const PageUpdateOrInsertRecord& pageInsertOrUpdateRecord);
     BMFileHandle* getVersionedFileHandleIfWALVersionAndBMShouldBeCleared(const DBFileID& dbFileID);
-    std::unique_ptr<catalog::Catalog> getCatalogForRecovery(common::FileVersionType dbFileType);
 
 private:
     bool isRecovering;

@@ -6,6 +6,9 @@
 #include "function/hash/hash_functions.h"
 
 namespace kuzu {
+namespace catalog {
+enum class CatalogEntryType : uint8_t;
+}
 namespace storage {
 
 struct NodeIndexID {
@@ -94,14 +97,15 @@ struct CommitRecord {
 
 struct CreateTableRecord {
     common::table_id_t tableID;
-    common::TableType tableType;
+    catalog::CatalogEntryType catalogEntryType;
 
     CreateTableRecord() = default;
-    explicit CreateTableRecord(common::table_id_t tableID, common::TableType tableType)
-        : tableID{tableID}, tableType{tableType} {}
+    explicit CreateTableRecord(
+        common::table_id_t tableID, catalog::CatalogEntryType catalogEntryType)
+        : tableID{tableID}, catalogEntryType{catalogEntryType} {}
 
     inline bool operator==(const CreateTableRecord& rhs) const {
-        return tableID == rhs.tableID && tableType == rhs.tableType;
+        return tableID == rhs.tableID && catalogEntryType == rhs.catalogEntryType;
     }
 };
 
@@ -154,12 +158,16 @@ struct TableStatisticsRecord {
 
 struct DropTableRecord {
     common::table_id_t tableID;
+    catalog::CatalogEntryType catalogEntryType;
 
     DropTableRecord() = default;
 
-    explicit DropTableRecord(common::table_id_t tableID) : tableID{tableID} {}
+    explicit DropTableRecord(common::table_id_t tableID, catalog::CatalogEntryType catalogEntryType)
+        : tableID{tableID}, catalogEntryType{catalogEntryType} {}
 
-    inline bool operator==(const DropTableRecord& rhs) const { return tableID == rhs.tableID; }
+    inline bool operator==(const DropTableRecord& rhs) const {
+        return tableID == rhs.tableID && catalogEntryType == rhs.catalogEntryType;
+    }
 };
 
 struct DropPropertyRecord {
@@ -213,12 +221,14 @@ struct WALRecord {
     static WALRecord newCommitRecord(uint64_t transactionID);
     static WALRecord newTableStatisticsRecord(bool isNodeTable);
     static WALRecord newCatalogRecord();
-    static WALRecord newCreateTableRecord(common::table_id_t tableID, common::TableType tableType);
+    static WALRecord newCreateTableRecord(
+        common::table_id_t tableID, catalog::CatalogEntryType catalogEntryType);
     static WALRecord newRdfGraphRecord(common::table_id_t rdfGraphID,
         common::table_id_t resourceTableID, common::table_id_t literalTableID,
         common::table_id_t resourceTripleTableID, common::table_id_t literalTripleTableID);
     static WALRecord newCopyTableRecord(common::table_id_t tableID);
-    static WALRecord newDropTableRecord(common::table_id_t tableID);
+    static WALRecord newDropTableRecord(
+        common::table_id_t tableID, catalog::CatalogEntryType entryType);
     static WALRecord newDropPropertyRecord(
         common::table_id_t tableID, common::property_id_t propertyID);
     static WALRecord newAddPropertyRecord(

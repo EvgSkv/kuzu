@@ -34,7 +34,16 @@ CatalogContent::CatalogContent(common::VirtualFileSystem* vfs) : nextTableID{0},
 }
 
 CatalogContent::CatalogContent(const std::string& directory, VirtualFileSystem* vfs) : vfs{vfs} {
-    readFromFile(directory, FileVersionType::ORIGINAL);
+    auto catalogPath = StorageUtils::getCatalogFilePath(vfs, directory, FileVersionType::ORIGINAL);
+    if (!vfs->fileOrPathExists(catalogPath)) {
+        tables = std::make_unique<CatalogSet>();
+        functions = std::make_unique<CatalogSet>();
+        // We need to save the empty catalog file here so that the `overwriteFile` can succeed
+        // during wal replay.
+        saveToFile(directory, FileVersionType::ORIGINAL);
+    } else {
+        readFromFile(directory, FileVersionType::ORIGINAL);
+    }
     registerBuiltInFunctions();
 }
 

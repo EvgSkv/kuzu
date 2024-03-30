@@ -258,16 +258,13 @@ void WALReplayer::replayDropTableRecord(const WALRecord& walRecord) {
                 // Nothing to undo.
                 return;
             }
-            auto catalogForRecovery = getCatalogForRecovery(FileVersionType::ORIGINAL);
-            auto tableEntry =
-                catalogForRecovery->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
-            switch (tableEntry->getTableType()) {
-            case TableType::NODE: {
+            switch (walRecord.dropTableRecord.catalogEntryType) {
+            case CatalogEntryType::NODE_TABLE_ENTRY: {
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
                 WALReplayerUtils::removeHashIndexFile(vfs, tableID, wal->getDirectory());
             } break;
-            case TableType::REL:
-            case TableType::RDF: {
+            case CatalogEntryType::REL_TABLE_ENTRY:
+            case CatalogEntryType::REL_GROUP_ENTRY: {
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
             } break;
             default: {
@@ -364,15 +361,6 @@ BMFileHandle* WALReplayer::getVersionedFileHandleIfWALVersionAndBMShouldBeCleare
         KU_UNREACHABLE;
     }
     }
-}
-
-std::unique_ptr<Catalog> WALReplayer::getCatalogForRecovery(FileVersionType fileVersionType) {
-    // When we are recovering our database, the catalog field of walReplayer has not been
-    // initialized and recovered yet. We need to create a new catalog to get node/rel tableEntries
-    // for recovering.
-    auto catalogForRecovery = std::make_unique<Catalog>(vfs);
-    catalogForRecovery->getReadOnlyVersion()->readFromFile(wal->getDirectory(), fileVersionType);
-    return catalogForRecovery;
 }
 
 } // namespace storage

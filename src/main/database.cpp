@@ -90,10 +90,10 @@ Database::Database(std::string_view databasePath, SystemConfig systemConfig)
     wal =
         std::make_unique<WAL>(this->databasePath, systemConfig.readOnly, *bufferManager, vfs.get());
     recoverIfNecessary();
+    transactionManager = std::make_unique<transaction::TransactionManager>(*wal);
     catalog = std::make_unique<catalog::Catalog>(wal.get(), vfs.get());
     storageManager = std::make_unique<storage::StorageManager>(systemConfig.readOnly, *catalog,
         *memoryManager, wal.get(), systemConfig.enableCompression, vfs.get());
-    transactionManager = std::make_unique<transaction::TransactionManager>(*wal);
     extensionOptions = std::make_unique<extension::ExtensionOptions>();
     databaseManager = std::make_unique<DatabaseManager>();
 }
@@ -169,10 +169,6 @@ void Database::initDBDirAndCoreFilesIfNecessary() {
     if (!vfs->fileOrPathExists(StorageUtils::getRelsStatisticsFilePath(
             vfs.get(), databasePath, FileVersionType::ORIGINAL))) {
         RelsStoreStats::saveInitialRelsStatisticsToFile(vfs.get(), databasePath);
-    }
-    if (!vfs->fileOrPathExists(
-            StorageUtils::getCatalogFilePath(vfs.get(), databasePath, FileVersionType::ORIGINAL))) {
-        Catalog::saveInitialCatalogToFile(databasePath, vfs.get());
     }
 }
 

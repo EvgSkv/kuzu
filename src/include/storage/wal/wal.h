@@ -10,6 +10,9 @@ class logger;
 }
 
 namespace kuzu {
+namespace catalog {
+enum class CatalogEntryType : uint8_t;
+}
 namespace storage {
 
 using lock_t = std::unique_lock<std::mutex>;
@@ -108,11 +111,9 @@ public:
         common::table_id_t literalTableID, common::table_id_t resourceTripleTableID,
         common::table_id_t literalTripleTableID);
 
-    void logOverflowFileNextBytePosRecord(DBFileID dbFileID, uint64_t prevNextByteToWriteTo);
-
     void logCopyTableRecord(common::table_id_t tableID);
 
-    void logDropTableRecord(common::table_id_t tableID);
+    void logDropTableRecord(common::table_id_t tableID, catalog::CatalogEntryType tableType);
 
     void logDropPropertyRecord(common::table_id_t tableID, common::property_id_t propertyID);
 
