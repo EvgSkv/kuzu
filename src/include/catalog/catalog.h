@@ -26,9 +26,6 @@ public:
 
     Catalog(storage::WAL* wal, common::VirtualFileSystem* vfs);
 
-    // TODO(Guodong): Get rid of the following.
-    inline CatalogContent* getReadOnlyVersion() const { return readOnlyVersion.get(); }
-
     // ----------------------------- Table Schemas ----------------------------
     uint64_t getTableCount(transaction::Transaction* tx) const;
 
@@ -94,12 +91,6 @@ public:
         if (!readWriteVersion) {
             readWriteVersion = readOnlyVersion->copy();
         }
-    }
-
-    static void saveInitialCatalogToFile(
-        const std::string& directory, common::VirtualFileSystem* vfs) {
-        std::make_unique<Catalog>(vfs)->getReadOnlyVersion()->saveToFile(
-            directory, common::FileVersionType::ORIGINAL);
     }
 
 private:

@@ -30,7 +30,7 @@ public:
     std::string getComment() const { return comment; }
     void setComment(std::string newComment) { comment = std::move(newComment); }
     virtual bool isParent(common::table_id_t /*tableID*/) { return false; };
-    // TODO(Guodong/Ziyi): This function should be removed. Instead we should use CatalogEntryType.
+    // TODO(Guodong/Xiyang): This function should be removed. Instead should use CatalogEntryType.
     virtual common::TableType getTableType() const = 0;
     virtual function::TableFunction getScanFunction() { KU_UNREACHABLE; }
 

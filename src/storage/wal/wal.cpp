@@ -66,16 +66,14 @@ void WAL::logCatalogRecord() {
 
 void WAL::logCreateNodeTableRecord(table_id_t tableID) {
     lock_t lck{mtx};
-    WALRecord walRecord =
-        WALRecord::newCreateTableRecord(tableID, catalog::CatalogEntryType::NODE_TABLE_ENTRY);
+    WALRecord walRecord = WALRecord::newCreateTableRecord(tableID, TableType::NODE);
     addToUpdatedTables(tableID);
     addNewWALRecordNoLock(walRecord);
 }
 
 void WAL::logCreateRelTableRecord(table_id_t tableID) {
     lock_t lck{mtx};
-    WALRecord walRecord =
-        WALRecord::newCreateTableRecord(tableID, catalog::CatalogEntryType::REL_TABLE_ENTRY);
+    WALRecord walRecord = WALRecord::newCreateTableRecord(tableID, TableType::REL);
     addToUpdatedTables(tableID);
     addNewWALRecordNoLock(walRecord);
 }
@@ -95,7 +93,7 @@ void WAL::logCopyTableRecord(table_id_t tableID) {
     addNewWALRecordNoLock(walRecord);
 }
 
-void WAL::logDropTableRecord(table_id_t tableID, catalog::CatalogEntryType tableType) {
+void WAL::logDropTableRecord(table_id_t tableID, TableType tableType) {
     lock_t lck{mtx};
     WALRecord walRecord = WALRecord::newDropTableRecord(tableID, tableType);
     addNewWALRecordNoLock(walRecord);

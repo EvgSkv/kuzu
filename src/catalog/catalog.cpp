@@ -149,11 +149,11 @@ void Catalog::dropTableSchema(table_id_t tableID) {
     auto tableEntry = readWriteVersion->getTableCatalogEntry(tableID);
     switch (tableEntry->getType()) {
     case CatalogEntryType::REL_GROUP_ENTRY: {
-        auto nodeTableEntry = ku_dynamic_cast<CatalogEntry*, RelGroupCatalogEntry*>(tableEntry);
-        auto relTableIDs = nodeTableEntry->getRelTableIDs();
+        auto relGroupSchema = ku_dynamic_cast<CatalogEntry*, RelGroupCatalogEntry*>(tableEntry);
+        auto relTableIDs = relGroupSchema->getRelTableIDs();
         readWriteVersion->dropTable(tableID);
         for (auto relTableID : relTableIDs) {
-            wal->logDropTableRecord(relTableID, CatalogEntryType::REL_TABLE_ENTRY);
+            wal->logDropTableRecord(relTableID, TableType::REL);
         }
     } break;
     case CatalogEntryType::RDF_GRAPH_ENTRY: {
@@ -168,17 +168,17 @@ void Catalog::dropTableSchema(table_id_t tableID) {
         readWriteVersion->dropTable(rTableID);
         readWriteVersion->dropTable(lTableID);
         readWriteVersion->dropTable(graphID);
-        wal->logDropTableRecord(rtTableID, CatalogEntryType::REL_TABLE_ENTRY);
-        wal->logDropTableRecord(ltTableID, CatalogEntryType::REL_TABLE_ENTRY);
-        wal->logDropTableRecord(rTableID, CatalogEntryType::NODE_TABLE_ENTRY);
-        wal->logDropTableRecord(lTableID, CatalogEntryType::NODE_TABLE_ENTRY);
-        wal->logDropTableRecord(graphID, CatalogEntryType::RDF_GRAPH_ENTRY);
+        wal->logDropTableRecord(rtTableID, TableType::REL);
+        wal->logDropTableRecord(ltTableID, TableType::REL);
+        wal->logDropTableRecord(rTableID, TableType::NODE);
+        wal->logDropTableRecord(lTableID, TableType::NODE);
+        wal->logDropTableRecord(graphID, TableType::RDF);
     } break;
     case CatalogEntryType::NODE_TABLE_ENTRY:
     case CatalogEntryType::REL_TABLE_ENTRY: {
-        auto tableType = tableEntry->getType();
+        auto tableSchema = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(tableEntry);
         readWriteVersion->dropTable(tableID);
-        wal->logDropTableRecord(tableID, tableType);
+        wal->logDropTableRecord(tableID, tableSchema->getTableType());
     } break;
     default: {
         KU_UNREACHABLE;

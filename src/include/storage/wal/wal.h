@@ -113,7 +113,7 @@ public:
 
     void logCopyTableRecord(common::table_id_t tableID);
 
-    void logDropTableRecord(common::table_id_t tableID, catalog::CatalogEntryType tableType);
+    void logDropTableRecord(common::table_id_t tableID, common::TableType tableType);
 
     void logDropPropertyRecord(common::table_id_t tableID, common::property_id_t propertyID);
 

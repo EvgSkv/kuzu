@@ -237,11 +237,7 @@ void WALReplayer::replayDropTableRecord(const WALRecord& walRecord) {
         if (!isRecovering) {
             auto tableEntry = catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID);
             switch (tableEntry->getTableType()) {
-            case TableType::NODE: {
-                storageManager->dropTable(tableID);
-                // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
-                WALReplayerUtils::removeHashIndexFile(vfs, tableID, wal->getDirectory());
-            } break;
+            case TableType::NODE:
             case TableType::REL: {
                 storageManager->dropTable(tableID);
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
@@ -258,13 +254,13 @@ void WALReplayer::replayDropTableRecord(const WALRecord& walRecord) {
                 // Nothing to undo.
                 return;
             }
-            switch (walRecord.dropTableRecord.catalogEntryType) {
-            case CatalogEntryType::NODE_TABLE_ENTRY: {
+            switch (walRecord.dropTableRecord.tableType) {
+            case TableType::NODE: {
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
                 WALReplayerUtils::removeHashIndexFile(vfs, tableID, wal->getDirectory());
             } break;
-            case CatalogEntryType::REL_TABLE_ENTRY:
-            case CatalogEntryType::REL_GROUP_ENTRY: {
+            case TableType::REL:
+            case TableType::RDF: {
                 // TODO(Guodong): Do nothing for now. Should remove metaDA and reclaim free pages.
             } break;
             default: {
