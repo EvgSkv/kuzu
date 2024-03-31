@@ -42,11 +42,12 @@ Function* BuiltInFunctionsUtils::matchFunction(const std::string& name, CatalogS
 
 Function* BuiltInFunctionsUtils::matchFunction(const std::string& name,
     const std::vector<common::LogicalType>& inputTypes, CatalogSet* catalogSet) {
-    if (!catalogSet->containsEntry(name)) {
+    if (!catalogSet->containsEntry(&transaction::DUMMY_WRITE_TRANSACTION, name)) {
         throw CatalogException(stringFormat("{} function does not exist.", name));
     }
-    auto& functionSet =
-        reinterpret_cast<FunctionCatalogEntry*>(catalogSet->getEntry(name))->getFunctionSet();
+    auto& functionSet = reinterpret_cast<FunctionCatalogEntry*>(
+        catalogSet->getEntry(&transaction::DUMMY_WRITE_TRANSACTION, name))
+                            ->getFunctionSet();
     bool isOverload = functionSet.size() > 1;
     std::vector<Function*> candidateFunctions;
     uint32_t minCost = UINT32_MAX;
@@ -74,8 +75,9 @@ Function* BuiltInFunctionsUtils::matchFunction(const std::string& name,
 
 AggregateFunction* BuiltInFunctionsUtils::matchAggregateFunction(const std::string& name,
     const std::vector<common::LogicalType>& inputTypes, bool isDistinct, CatalogSet* catalogSet) {
-    auto& functionSet =
-        reinterpret_cast<FunctionCatalogEntry*>(catalogSet->getEntry(name))->getFunctionSet();
+    auto& functionSet = reinterpret_cast<FunctionCatalogEntry*>(
+        catalogSet->getEntry(&transaction::DUMMY_WRITE_TRANSACTION, name))
+                            ->getFunctionSet();
     std::vector<AggregateFunction*> candidateFunctions;
     for (auto& function : functionSet) {
         auto aggregateFunction = ku_dynamic_cast<Function*, AggregateFunction*>(function.get());
@@ -490,55 +492,76 @@ void BuiltInFunctionsUtils::validateSpecialCases(std::vector<Function*>& candida
 }
 
 void BuiltInFunctionsUtils::registerTableFunctions(CatalogSet* catalogSet) {
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        CURRENT_SETTING_FUNC_NAME, CurrentSettingFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        DB_VERSION_FUNC_NAME, DBVersionFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        SHOW_TABLES_FUNC_NAME, ShowTablesFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        TABLE_INFO_FUNC_NAME, TableInfoFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        SHOW_CONNECTION_FUNC_NAME, ShowConnectionFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        STORAGE_INFO_FUNC_NAME, StorageInfoFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            CURRENT_SETTING_FUNC_NAME, CurrentSettingFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            DB_VERSION_FUNC_NAME, DBVersionFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            SHOW_TABLES_FUNC_NAME, ShowTablesFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            TABLE_INFO_FUNC_NAME, TableInfoFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            SHOW_CONNECTION_FUNC_NAME, ShowConnectionFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            STORAGE_INFO_FUNC_NAME, StorageInfoFunction::getFunctionSet()));
     // Read functions
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_PARQUET_FUNC_NAME, ParquetScanFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_NPY_FUNC_NAME, NpyScanFunction::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_CSV_SERIAL_FUNC_NAME, SerialCSVScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_CSV_PARALLEL_FUNC_NAME, ParallelCSVScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_RDF_RESOURCE_FUNC_NAME, RdfResourceScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_RDF_LITERAL_FUNC_NAME, RdfLiteralScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_RDF_RESOURCE_TRIPLE_FUNC_NAME, RdfResourceTripleScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_RDF_LITERAL_TRIPLE_FUNC_NAME, RdfLiteralTripleScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_RDF_ALL_TRIPLE_FUNC_NAME, RdfAllTripleScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        IN_MEM_READ_RDF_RESOURCE_FUNC_NAME, RdfResourceInMemScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        IN_MEM_READ_RDF_LITERAL_FUNC_NAME, RdfLiteralInMemScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        IN_MEM_READ_RDF_RESOURCE_TRIPLE_FUNC_NAME, RdfResourceTripleInMemScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        IN_MEM_READ_RDF_LITERAL_TRIPLE_FUNC_NAME, RdfLiteralTripleInMemScan::getFunctionSet()));
-    catalogSet->createEntry(std::make_unique<TableFunctionCatalogEntry>(
-        READ_FTABLE_FUNC_NAME, FTableScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_PARQUET_FUNC_NAME, ParquetScanFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_NPY_FUNC_NAME, NpyScanFunction::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_CSV_SERIAL_FUNC_NAME, SerialCSVScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_CSV_PARALLEL_FUNC_NAME, ParallelCSVScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_RDF_RESOURCE_FUNC_NAME, RdfResourceScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_RDF_LITERAL_FUNC_NAME, RdfLiteralScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_RDF_RESOURCE_TRIPLE_FUNC_NAME, RdfResourceTripleScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_RDF_LITERAL_TRIPLE_FUNC_NAME, RdfLiteralTripleScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_RDF_ALL_TRIPLE_FUNC_NAME, RdfAllTripleScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            IN_MEM_READ_RDF_RESOURCE_FUNC_NAME, RdfResourceInMemScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            IN_MEM_READ_RDF_LITERAL_FUNC_NAME, RdfLiteralInMemScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(IN_MEM_READ_RDF_RESOURCE_TRIPLE_FUNC_NAME,
+            RdfResourceTripleInMemScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            IN_MEM_READ_RDF_LITERAL_TRIPLE_FUNC_NAME, RdfLiteralTripleInMemScan::getFunctionSet()));
+    catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+        std::make_unique<TableFunctionCatalogEntry>(
+            READ_FTABLE_FUNC_NAME, FTableScan::getFunctionSet()));
 }
 
 void BuiltInFunctionsUtils::registerFunctions(catalog::CatalogSet* catalogSet) {
     auto functions = FunctionCollection::getFunctions();
     for (auto i = 0u; functions[i].name != nullptr; ++i) {
         auto functionSet = functions[i].getFunctionSetFunc();
-        catalogSet->createEntry(std::make_unique<FunctionCatalogEntry>(
-            functions[i].catalogEntryType, functions[i].name, std::move(functionSet)));
+        catalogSet->createEntry(&transaction::DUMMY_WRITE_TRANSACTION,
+            std::make_unique<FunctionCatalogEntry>(
+                functions[i].catalogEntryType, functions[i].name, std::move(functionSet)));
     }
 }
 

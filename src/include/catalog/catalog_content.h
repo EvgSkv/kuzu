@@ -19,6 +19,7 @@ struct ScalarMacroFunction;
 
 namespace catalog {
 
+// TODO(Guodong): Shoule be merged with Catalog.
 class CatalogContent {
     friend class Catalog;
 
@@ -34,13 +35,13 @@ public:
         : tables{std::move(tables)}, nextTableID{nextTableID}, vfs{vfs}, functions{std::move(
                                                                              functions)} {}
 
-    common::table_id_t getTableID(const std::string& tableName) const;
-    CatalogEntry* getTableCatalogEntry(common::table_id_t tableID) const;
+    common::table_id_t getTableID(
+        transaction::Transaction* transaction, const std::string& tableName) const;
+    CatalogEntry* getTableCatalogEntry(
+        transaction::Transaction* transaction, common::table_id_t tableID) const;
 
     void saveToFile(const std::string& directory, common::FileVersionType dbFileType);
     void readFromFile(const std::string& directory, common::FileVersionType dbFileType);
-
-    std::unique_ptr<CatalogContent> copy() const;
 
 protected:
     common::table_id_t assignNextTableID() { return nextTableID++; }
@@ -50,47 +51,54 @@ private:
     void registerBuiltInFunctions();
 
     bool containMacro(const std::string& macroName) const {
-        return functions->containsEntry(macroName);
+        return functions->containsEntry(&transaction::DUMMY_READ_TRANSACTION, macroName);
     }
     void addFunction(std::string name, function::function_set definitions);
 
     function::ScalarMacroFunction* getScalarMacroFunction(const std::string& name) const;
 
     // ----------------------------- Table entries ----------------------------
-    uint64_t getNumTables() const { return tables->getEntries().size(); }
+    uint64_t getNumTables(transaction::Transaction* transaction) const {
+        return tables->getEntries(transaction).size();
+    }
 
-    bool containsTable(const std::string& tableName) const;
-    bool containsTable(CatalogEntryType catalogType) const;
+    bool containsTable(transaction::Transaction* transaction, const std::string& tableName) const;
+    bool containsTable(transaction::Transaction* transaction, CatalogEntryType catalogType) const;
 
-    std::string getTableName(common::table_id_t tableID) const;
+    std::string getTableName(
+        transaction::Transaction* transaction, common::table_id_t tableID) const;
 
     template<typename T>
-    std::vector<T> getTableCatalogEntries(CatalogEntryType catalogType) const {
+    std::vector<T> getTableCatalogEntries(
+        transaction::Transaction* transaction, CatalogEntryType catalogType) const {
         std::vector<T> result;
-        for (auto& [_, entry] : tables->getEntries()) {
+        for (auto& [_, entry] : tables->getEntries(transaction)) {
             if (entry->getType() == catalogType) {
-                result.push_back(common::ku_dynamic_cast<CatalogEntry*, T>(entry.get()));
+                result.push_back(common::ku_dynamic_cast<CatalogEntry*, T>(entry));
             }
         }
         return result;
     }
 
-    std::vector<common::table_id_t> getTableIDs(CatalogEntryType catalogType) const;
+    std::vector<common::table_id_t> getTableIDs(
+        transaction::Transaction* transaction, CatalogEntryType catalogType) const;
 
-    common::table_id_t createTable(const binder::BoundCreateTableInfo& info);
-    void dropTable(common::table_id_t tableID);
-    void alterTable(const binder::BoundAlterInfo& info);
+    common::table_id_t createTable(
+        transaction::Transaction* transaction, const binder::BoundCreateTableInfo& info);
+    void dropTable(transaction::Transaction* transaction, common::table_id_t tableID);
+    void alterTable(transaction::Transaction* transaction, const binder::BoundAlterInfo& info);
+    void renameTable(transaction::Transaction* transaction, common::table_id_t tableID,
+        const std::string& newName);
 
 private:
-    std::unique_ptr<CatalogEntry> createNodeTableEntry(
+    std::unique_ptr<CatalogEntry> createNodeTableEntry(transaction::Transaction* transaction,
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info) const;
-    std::unique_ptr<CatalogEntry> createRelTableEntry(
+    std::unique_ptr<CatalogEntry> createRelTableEntry(transaction::Transaction* transaction,
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info) const;
-    std::unique_ptr<CatalogEntry> createRelTableGroupEntry(
+    std::unique_ptr<CatalogEntry> createRelTableGroupEntry(transaction::Transaction* transaction,
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info);
-    std::unique_ptr<CatalogEntry> createRdfGraphEntry(
+    std::unique_ptr<CatalogEntry> createRdfGraphEntry(transaction::Transaction* transaction,
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info);
-    void renameTable(common::table_id_t tableID, const std::string& newName);
 
 protected:
     std::unique_ptr<CatalogSet> tables;

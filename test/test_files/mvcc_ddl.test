@@ -1,0 +1,141 @@
+-GROUP DDL-MVCC
+-DATASET CSV empty
+--
+
+-CASE CreateTableManualCommit
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT COMMIT;
+---- ok
+
+-CASE CreateTableManualRollback
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table: t does not exist.
+
+-CASE CreateTableAutoCommit
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+-CASE CreateTableWriteWriteConflict
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- error
+Catalog exception: Write-write conflict on creating catalog entry with name t.
+
+-CASE ConcurrentWriteAndRead
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table: t does not exist.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+-CASE CreateAndDropTableSingleTransaction
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT DROP TABLE t;
+---- ok
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table: t does not exist.
+
+-CASE DropTableRollback
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT DROP TABLE t;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table: t does not exist.
+-STATEMENT ROLLBACK;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+-CASE CreateAndDropMultiConnections
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table: t does not exist.
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] DROP TABLE t;
+---- error
+Binder exception: Table t does not exist.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+# Add/Drop property of tables
+# Rename table
+# Rename properties

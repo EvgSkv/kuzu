@@ -169,9 +169,6 @@ void WALReplayer::replayCatalogRecord() {
         auto originalFile = StorageUtils::getCatalogFilePath(
             vfs, wal->getDirectory(), common::FileVersionType::ORIGINAL);
         vfs->overwriteFile(walFile, originalFile);
-        if (!isRecovering) {
-            catalog->checkpointInMemory();
-        }
     } else {
         // Since DDL statements are single statements that are auto committed, it is impossible
         // for users to roll back a DDL statement.
@@ -371,7 +368,7 @@ std::unique_ptr<Catalog> WALReplayer::getCatalogForRecovery(FileVersionType file
     // initialized and recovered yet. We need to create a new catalog to get node/rel tableEntries
     // for recovering.
     auto catalogForRecovery = std::make_unique<Catalog>(vfs);
-    catalogForRecovery->getReadOnlyVersion()->readFromFile(wal->getDirectory(), fileVersionType);
+    catalogForRecovery->getContent()->readFromFile(wal->getDirectory(), fileVersionType);
     return catalogForRecovery;
 }
 

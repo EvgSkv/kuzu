@@ -207,7 +207,6 @@ void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRec
         return;
     }
     KU_ASSERT(transaction->isWriteTransaction());
-    catalog->prepareCommitOrRollback(TransactionAction::COMMIT);
     storageManager->prepareCommit(transaction);
     // Note: It is enough to stop and wait transactions to leave the system instead of
     // for example checking on the query processor's task scheduler. This is because the
@@ -219,14 +218,10 @@ void Database::commit(Transaction* transaction, bool skipCheckpointForTestingRec
     transactionManager->stopNewTransactionsAndWaitUntilAllReadTransactionsLeave();
     // Note: committing and stopping new transactions can be done in any order. This
     // order allows us to throw exceptions if we have to wait a lot to stop.
-    transactionManager->commitButKeepActiveWriteTransaction(transaction);
-    wal->flushAllPages();
-    if (skipCheckpointForTestingRecovery) {
-        transactionManager->allowReceivingNewTransactions();
-        return;
+    transactionManager->commit(transaction);
+    if (!skipCheckpointForTestingRecovery) {
+        checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT);
     }
-    checkpointAndClearWAL(WALReplayMode::COMMIT_CHECKPOINT);
-    transactionManager->manuallyClearActiveWriteTransaction(transaction);
     transactionManager->allowReceivingNewTransactions();
 }
 
@@ -237,14 +232,12 @@ void Database::rollback(
         return;
     }
     KU_ASSERT(transaction->isWriteTransaction());
-    catalog->prepareCommitOrRollback(TransactionAction::ROLLBACK);
     storageManager->prepareRollback(transaction);
+    transactionManager->rollback(transaction);
     if (skipCheckpointForTestingRecovery) {
         wal->flushAllPages();
         return;
     }
-    rollbackAndClearWAL();
-    transactionManager->manuallyClearActiveWriteTransaction(transaction);
 }
 
 void Database::checkpointAndClearWAL(WALReplayMode replayMode) {

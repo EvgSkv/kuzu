@@ -40,31 +40,32 @@ CatalogContent::CatalogContent(const std::string& directory, VirtualFileSystem* 
     registerBuiltInFunctions();
 }
 
-table_id_t CatalogContent::createTable(const BoundCreateTableInfo& info) {
+table_id_t CatalogContent::createTable(
+    transaction::Transaction* tx, const binder::BoundCreateTableInfo& info) {
     table_id_t tableID = assignNextTableID();
     std::unique_ptr<CatalogEntry> entry;
     switch (info.type) {
     case TableType::NODE: {
-        entry = createNodeTableEntry(tableID, info);
+        entry = createNodeTableEntry(tx, tableID, info);
     } break;
     case TableType::REL: {
-        entry = createRelTableEntry(tableID, info);
+        entry = createRelTableEntry(tx, tableID, info);
     } break;
     case TableType::REL_GROUP: {
-        entry = createRelTableGroupEntry(tableID, info);
+        entry = createRelTableGroupEntry(tx, tableID, info);
     } break;
     case TableType::RDF: {
-        entry = createRdfGraphEntry(tableID, info);
+        entry = createRdfGraphEntry(tx, tableID, info);
     } break;
     default:
         KU_UNREACHABLE;
     }
-    tables->createEntry(std::move(entry));
+    tables->createEntry(tx, std::move(entry));
     return tableID;
 }
 
 std::unique_ptr<CatalogEntry> CatalogContent::createNodeTableEntry(
-    table_id_t tableID, const BoundCreateTableInfo& info) const {
+    transaction::Transaction*, table_id_t tableID, const BoundCreateTableInfo& info) const {
     auto extraInfo =
         ku_dynamic_cast<BoundExtraCreateCatalogEntryInfo*, BoundExtraCreateNodeTableInfo*>(
             info.extraInfo.get());
@@ -77,14 +78,15 @@ std::unique_ptr<CatalogEntry> CatalogContent::createNodeTableEntry(
 }
 
 std::unique_ptr<CatalogEntry> CatalogContent::createRelTableEntry(
-    table_id_t tableID, const BoundCreateTableInfo& info) const {
+    transaction::Transaction* transaction, table_id_t tableID,
+    const BoundCreateTableInfo& info) const {
     auto extraInfo =
         ku_dynamic_cast<BoundExtraCreateCatalogEntryInfo*, BoundExtraCreateRelTableInfo*>(
             info.extraInfo.get());
     auto srcTableEntry = ku_dynamic_cast<CatalogEntry*, NodeTableCatalogEntry*>(
-        getTableCatalogEntry(extraInfo->srcTableID));
+        getTableCatalogEntry(transaction, extraInfo->srcTableID));
     auto dstTableEntry = ku_dynamic_cast<CatalogEntry*, NodeTableCatalogEntry*>(
-        getTableCatalogEntry(extraInfo->dstTableID));
+        getTableCatalogEntry(transaction, extraInfo->dstTableID));
     srcTableEntry->addFwdRelTableID(tableID);
     dstTableEntry->addBWdRelTableID(tableID);
     auto relTableEntry =
@@ -97,20 +99,20 @@ std::unique_ptr<CatalogEntry> CatalogContent::createRelTableEntry(
 }
 
 std::unique_ptr<CatalogEntry> CatalogContent::createRelTableGroupEntry(
-    table_id_t tableID, const BoundCreateTableInfo& info) {
+    transaction::Transaction* transaction, table_id_t tableID, const BoundCreateTableInfo& info) {
     auto extraInfo =
         ku_dynamic_cast<BoundExtraCreateCatalogEntryInfo*, BoundExtraCreateRelTableGroupInfo*>(
             info.extraInfo.get());
     std::vector<table_id_t> relTableIDs;
     relTableIDs.reserve(extraInfo->infos.size());
     for (auto& childInfo : extraInfo->infos) {
-        relTableIDs.push_back(createTable(childInfo));
+        relTableIDs.push_back(createTable(transaction, childInfo));
     }
     return std::make_unique<RelGroupCatalogEntry>(info.tableName, tableID, std::move(relTableIDs));
 }
 
 std::unique_ptr<CatalogEntry> CatalogContent::createRdfGraphEntry(
-    table_id_t tableID, const BoundCreateTableInfo& info) {
+    transaction::Transaction* transaction, table_id_t tableID, const BoundCreateTableInfo& info) {
     auto extraInfo =
         ku_dynamic_cast<BoundExtraCreateCatalogEntryInfo*, BoundExtraCreateRdfGraphInfo*>(
             info.extraInfo.get());
@@ -125,64 +127,64 @@ std::unique_ptr<CatalogEntry> CatalogContent::createRdfGraphEntry(
         ku_dynamic_cast<BoundExtraCreateCatalogEntryInfo*, BoundExtraCreateRelTableInfo*>(
             literalTripleInfo.extraInfo.get());
     // Resource table
-    auto resourceTableID = createTable(resourceInfo);
+    auto resourceTableID = createTable(transaction, resourceInfo);
     // Literal table
-    auto literalTableID = createTable(literalInfo);
+    auto literalTableID = createTable(transaction, literalInfo);
     // Resource triple table
     resourceTripleExtraInfo->srcTableID = resourceTableID;
     resourceTripleExtraInfo->dstTableID = resourceTableID;
-    auto resourceTripleTableID = createTable(resourceTripleInfo);
+    auto resourceTripleTableID = createTable(transaction, resourceTripleInfo);
     // Literal triple table
     literalTripleExtraInfo->srcTableID = resourceTableID;
     literalTripleExtraInfo->dstTableID = literalTableID;
-    auto literalTripleTableID = createTable(literalTripleInfo);
+    auto literalTripleTableID = createTable(transaction, literalTripleInfo);
     // Rdf graph entry
     auto rdfGraphName = info.tableName;
     return std::make_unique<RDFGraphCatalogEntry>(rdfGraphName, tableID, resourceTableID,
         literalTableID, resourceTripleTableID, literalTripleTableID);
 }
 
-void CatalogContent::dropTable(table_id_t tableID) {
-    auto tableEntry = getTableCatalogEntry(tableID);
+void CatalogContent::dropTable(transaction::Transaction* tx, common::table_id_t tableID) {
+    auto tableEntry = getTableCatalogEntry(tx, tableID);
     if (tableEntry->getType() == CatalogEntryType::REL_GROUP_ENTRY) {
         auto relGroupEntry = ku_dynamic_cast<CatalogEntry*, RelGroupCatalogEntry*>(tableEntry);
         for (auto& relTableID : relGroupEntry->getRelTableIDs()) {
-            dropTable(relTableID);
+            dropTable(tx, relTableID);
         }
     }
-    tables->removeEntry(tableEntry->getName());
+    tables->dropEntry(tx, tableEntry->getName());
 }
 
-void CatalogContent::alterTable(const BoundAlterInfo& info) {
+void CatalogContent::alterTable(transaction::Transaction* transaction, const BoundAlterInfo& info) {
     switch (info.alterType) {
     case AlterType::RENAME_TABLE: {
         auto& renameInfo =
             ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenameTableInfo&>(
                 *info.extraInfo);
-        renameTable(info.tableID, renameInfo.newName);
+        renameTable(transaction, info.tableID, renameInfo.newName);
     } break;
     case AlterType::ADD_PROPERTY: {
         auto& addPropInfo =
             ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraAddPropertyInfo&>(
                 *info.extraInfo);
-        auto tableEntry =
-            ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(getTableCatalogEntry(info.tableID));
+        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
+            getTableCatalogEntry(transaction, info.tableID));
         tableEntry->addProperty(addPropInfo.propertyName, addPropInfo.dataType.copy());
     } break;
     case AlterType::RENAME_PROPERTY: {
         auto& renamePropInfo =
             ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenamePropertyInfo&>(
                 *info.extraInfo);
-        auto tableEntry =
-            ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(getTableCatalogEntry(info.tableID));
+        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
+            getTableCatalogEntry(transaction, info.tableID));
         tableEntry->renameProperty(renamePropInfo.propertyID, renamePropInfo.newName);
     } break;
     case AlterType::DROP_PROPERTY: {
         auto& dropPropInfo =
             ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraDropPropertyInfo&>(
                 *info.extraInfo);
-        auto tableEntry =
-            ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(getTableCatalogEntry(info.tableID));
+        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
+            getTableCatalogEntry(transaction, info.tableID));
         tableEntry->dropProperty(dropPropInfo.propertyID);
     } break;
     default: {
@@ -191,21 +193,22 @@ void CatalogContent::alterTable(const BoundAlterInfo& info) {
     }
 }
 
-void CatalogContent::renameTable(table_id_t tableID, const std::string& newName) {
+void CatalogContent::renameTable(
+    transaction::Transaction* transaction, table_id_t tableID, const std::string& newName) {
     // TODO(Xiyang/Ziyi): Do we allow renaming of rel table groups?
-    auto tableEntry = getTableCatalogEntry(tableID);
+    auto tableEntry = getTableCatalogEntry(transaction, tableID);
     if (tableEntry->getType() == CatalogEntryType::RDF_GRAPH_ENTRY) {
         auto rdfGraphEntry = ku_dynamic_cast<CatalogEntry*, RDFGraphCatalogEntry*>(tableEntry);
-        renameTable(rdfGraphEntry->getResourceTableID(),
+        renameTable(transaction, rdfGraphEntry->getResourceTableID(),
             RDFGraphCatalogEntry::getResourceTableName(newName));
-        renameTable(
-            rdfGraphEntry->getLiteralTableID(), RDFGraphCatalogEntry::getLiteralTableName(newName));
-        renameTable(rdfGraphEntry->getResourceTripleTableID(),
+        renameTable(transaction, rdfGraphEntry->getLiteralTableID(),
+            RDFGraphCatalogEntry::getLiteralTableName(newName));
+        renameTable(transaction, rdfGraphEntry->getResourceTripleTableID(),
             RDFGraphCatalogEntry::getResourceTripleTableName(newName));
-        renameTable(rdfGraphEntry->getLiteralTripleTableID(),
+        renameTable(transaction, rdfGraphEntry->getLiteralTripleTableID(),
             RDFGraphCatalogEntry::getLiteralTripleTableName(newName));
     }
-    tables->renameEntry(tableEntry->getName(), newName);
+    tables->renameEntry(transaction, tableEntry->getName(), newName);
 }
 
 static void validateStorageVersion(storage_version_t savedStorageVersion) {
@@ -264,34 +267,32 @@ void CatalogContent::readFromFile(const std::string& directory, FileVersionType 
 }
 
 void CatalogContent::addFunction(std::string name, function::function_set definitions) {
-    if (functions->containsEntry(name)) {
-        throw CatalogException{stringFormat("function {} already exists.", name)};
+    if (functions->containsEntry(&transaction::DUMMY_READ_TRANSACTION, name)) {
+        throw CatalogException{common::stringFormat("function {} already exists.", name)};
     }
-    functions->createEntry(std::make_unique<FunctionCatalogEntry>(
-        CatalogEntryType::SCALAR_FUNCTION_ENTRY, std::move(name), std::move(definitions)));
+    functions->createEntry(&transaction::DUMMY_READ_TRANSACTION,
+        std::make_unique<FunctionCatalogEntry>(
+            CatalogEntryType::SCALAR_FUNCTION_ENTRY, std::move(name), std::move(definitions)));
 }
 
 function::ScalarMacroFunction* CatalogContent::getScalarMacroFunction(
     const std::string& name) const {
-    return ku_dynamic_cast<CatalogEntry*, ScalarMacroCatalogEntry*>(functions->getEntry(name))
+    return ku_dynamic_cast<CatalogEntry*, ScalarMacroCatalogEntry*>(
+        functions->getEntry(&transaction::DUMMY_READ_TRANSACTION, name))
         ->getMacroFunction();
-}
-
-std::unique_ptr<CatalogContent> CatalogContent::copy() const {
-    std::unordered_map<std::string, std::unique_ptr<function::ScalarMacroFunction>> macrosToCopy;
-    return std::make_unique<CatalogContent>(tables->copy(), nextTableID, functions->copy(), vfs);
 }
 
 void CatalogContent::registerBuiltInFunctions() {
     function::BuiltInFunctionsUtils::createFunctions(functions.get());
 }
 
-bool CatalogContent::containsTable(const std::string& tableName) const {
-    return tables->containsEntry(tableName);
+bool CatalogContent::containsTable(
+    transaction::Transaction* tx, const std::string& tableName) const {
+    return tables->containsEntry(tx, tableName);
 }
 
-bool CatalogContent::containsTable(CatalogEntryType tableType) const {
-    for (auto& [_, entry] : tables->getEntries()) {
+bool CatalogContent::containsTable(transaction::Transaction* tx, CatalogEntryType tableType) const {
+    for (auto& [_, entry] : tables->getEntries(tx)) {
         if (entry->getType() == tableType) {
             return true;
         }
@@ -299,33 +300,36 @@ bool CatalogContent::containsTable(CatalogEntryType tableType) const {
     return false;
 }
 
-std::string CatalogContent::getTableName(table_id_t tableID) const {
-    return getTableCatalogEntry(tableID)->getName();
+std::string CatalogContent::getTableName(transaction::Transaction* tx, table_id_t tableID) const {
+    return getTableCatalogEntry(tx, tableID)->getName();
 }
 
-CatalogEntry* CatalogContent::getTableCatalogEntry(table_id_t tableID) const {
-    for (auto& [name, table] : tables->getEntries()) {
-        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(table.get());
+CatalogEntry* CatalogContent::getTableCatalogEntry(
+    transaction::Transaction* tx, table_id_t tableID) const {
+    for (auto& [name, table] : tables->getEntries(tx)) {
+        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(table);
         if (tableEntry->getTableID() == tableID) {
-            return table.get();
+            return table;
         }
     }
     KU_UNREACHABLE;
 }
 
-table_id_t CatalogContent::getTableID(const std::string& tableName) const {
-    if (tables->containsEntry(tableName)) {
-        return ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(tables->getEntry(tableName))
+common::table_id_t CatalogContent::getTableID(
+    transaction::Transaction* tx, const std::string& tableName) const {
+    if (tables->containsEntry(tx, tableName)) {
+        return ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(tables->getEntry(tx, tableName))
             ->getTableID();
     } else {
         throw CatalogException{stringFormat("Table: {} does not exist.", tableName)};
     }
 }
 
-std::vector<table_id_t> CatalogContent::getTableIDs(CatalogEntryType catalogType) const {
+std::vector<table_id_t> CatalogContent::getTableIDs(
+    transaction::Transaction* tx, CatalogEntryType catalogType) const {
     std::vector<table_id_t> tableIDs;
-    for (auto& [_, entry] : tables->getEntries()) {
-        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(entry.get());
+    for (auto& [_, entry] : tables->getEntries(tx)) {
+        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(entry);
         if (tableEntry->getType() == catalogType) {
             tableIDs.push_back(tableEntry->getTableID());
         }

@@ -296,7 +296,6 @@ std::unique_ptr<PreparedStatement> ClientContext::prepareNoLock(
                     preparedStatement->allowActiveTransaction(), preparedStatement->readOnly);
             }
             if (!this->getTx()->isReadOnly()) {
-                database->catalog->initCatalogContentForWriteTrxIfNecessary();
                 database->storageManager->initStatistics();
             }
         }
@@ -402,7 +401,6 @@ std::unique_ptr<QueryResult> ClientContext::executeAndAutoCommitIfNecessaryNoLoc
     if (preparedStatement->parsedStatement->requireTx() && requiredNexTx && getTx() == nullptr) {
         this->transactionContext->beginAutoTransaction(preparedStatement->isReadOnly());
         if (!preparedStatement->readOnly) {
-            database->catalog->initCatalogContentForWriteTrxIfNecessary();
             database->storageManager->initStatistics();
         }
     }

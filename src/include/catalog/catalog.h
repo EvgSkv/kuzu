@@ -9,7 +9,6 @@ namespace storage {
 class WAL;
 }
 namespace transaction {
-enum class TransactionAction : uint8_t;
 class Transaction;
 } // namespace transaction
 namespace catalog {
@@ -26,7 +25,7 @@ public:
     Catalog(storage::WAL* wal, common::VirtualFileSystem* vfs);
 
     // TODO(Guodong): Get rid of the following.
-    inline CatalogContent* getReadOnlyVersion() const { return readOnlyVersion.get(); }
+    inline CatalogContent* getContent() const { return content.get(); }
 
     // ----------------------------- Table Schemas ----------------------------
     uint64_t getTableCount(transaction::Transaction* tx) const;
@@ -50,11 +49,15 @@ public:
     std::vector<TableCatalogEntry*> getTableSchemas(
         transaction::Transaction* tx, const common::table_id_vector_t& tableIDs) const;
 
-    common::table_id_t createTableSchema(const binder::BoundCreateTableInfo& info);
-    void dropTableSchema(common::table_id_t tableID);
-    void alterTableSchema(const binder::BoundAlterInfo& info);
+    common::table_id_t createTableSchema(
+        transaction::Transaction* tx, const binder::BoundCreateTableInfo& info);
+    void dropTableSchema(transaction::Transaction* tx, common::table_id_t tableID);
+    void alterTableSchema(transaction::Transaction* tx, const binder::BoundAlterInfo& info);
+    void renameTable(
+        transaction::Transaction* tx, common::table_id_t tableID, const std::string& newName);
 
-    void setTableComment(common::table_id_t tableID, const std::string& comment);
+    void setTableComment(
+        transaction::Transaction* tx, common::table_id_t tableID, const std::string& comment);
 
     // ----------------------------- Functions ----------------------------
     void addFunction(std::string name, function::function_set functionSet);
@@ -67,43 +70,20 @@ public:
         std::string name, std::unique_ptr<function::ScalarMacroFunction> macro);
     // TODO(Ziyi): pass transaction pointer here.
     function::ScalarMacroFunction* getScalarMacroFunction(const std::string& name) const {
-        return readOnlyVersion->getScalarMacroFunction(name);
+        return content->getScalarMacroFunction(name);
     }
 
     std::vector<std::string> getMacroNames(transaction::Transaction* tx) const;
 
-    // ----------------------------- Tx ----------------------------
-    void prepareCommitOrRollback(transaction::TransactionAction action);
-    void checkpointInMemory();
-
-    void initCatalogContentForWriteTrxIfNecessary() {
-        if (!readWriteVersion) {
-            readWriteVersion = readOnlyVersion->copy();
-        }
-    }
-
+    // TODO(Guodong): Should be removed.
     static void saveInitialCatalogToFile(
         const std::string& directory, common::VirtualFileSystem* vfs) {
-        std::make_unique<Catalog>(vfs)->getReadOnlyVersion()->saveToFile(
+        std::make_unique<Catalog>(vfs)->content->saveToFile(
             directory, common::FileVersionType::ORIGINAL);
     }
 
-private:
-    CatalogContent* getVersion(transaction::Transaction* tx) const;
-
-    bool hasUpdates() const { return isUpdated; }
-    void setToUpdated() { isUpdated = true; }
-    void resetToNotUpdated() { isUpdated = false; }
-
-    void logCreateTableToWAL(const binder::BoundCreateTableInfo& info, common::table_id_t tableID);
-    void logAlterTableToWAL(const binder::BoundAlterInfo& info);
-
 protected:
-    // The flat indicates if the readWriteVersion has been updated and is different from the
-    // readOnlyVersion.
-    bool isUpdated;
-    std::unique_ptr<CatalogContent> readOnlyVersion;
-    std::unique_ptr<CatalogContent> readWriteVersion;
+    std::unique_ptr<CatalogContent> content;
     storage::WAL* wal;
 };
 

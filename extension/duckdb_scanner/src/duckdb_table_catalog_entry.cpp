@@ -12,9 +12,9 @@ common::TableType DuckDBTableCatalogEntry::getTableType() const {
     return common::TableType::FOREIGN;
 }
 
-std::unique_ptr<CatalogEntry> DuckDBTableCatalogEntry::copy() const {
-    return std::make_unique<DuckDBTableCatalogEntry>(*this);
-}
+//std::unique_ptr<CatalogEntry> DuckDBTableCatalogEntry::copy() const {
+//    return std::make_unique<DuckDBTableCatalogEntry>(*this);
+//}
 
 } // namespace catalog
 } // namespace kuzu

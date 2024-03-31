@@ -3,6 +3,7 @@
 #include <thread>
 
 #include "common/exception/transaction_manager.h"
+#include "main/client_context.h"
 
 using namespace kuzu::common;
 
@@ -15,14 +16,14 @@ std::unique_ptr<Transaction> TransactionManager::beginWriteTransaction(
     // ensures calls to other public functions is not restricted.
     lock_t newTransactionLck{mtxForStartingNewTransactions};
     lock_t publicFunctionLck{mtxForSerializingPublicFunctionCalls};
-    if (hasActiveWriteTransactionNoLock()) {
-        throw TransactionManagerException(
-            "Cannot start a new write transaction in the system. Only one write transaction at a "
-            "time is allowed in the system.");
-    }
-    auto transaction =
-        std::make_unique<Transaction>(clientContext, TransactionType::WRITE, ++lastTransactionID);
-    activeWriteTransactionID = lastTransactionID;
+    //    if (hasActiveWriteTransactionNoLock()) {
+    //        throw TransactionManagerException(
+    //            "Cannot start a new write transaction in the system. "
+    //            "Only one write transaction at a time is allowed in the system.");
+    //    }
+    auto transaction = std::make_unique<Transaction>(
+        clientContext, TransactionType::WRITE, ++lastTransactionID, lastTimestamp);
+    activeWriteTransactionID.insert(transaction->getID());
     return transaction;
 }
 
@@ -33,7 +34,7 @@ std::unique_ptr<Transaction> TransactionManager::beginReadOnlyTransaction(
     lock_t newTransactionLck{mtxForStartingNewTransactions};
     lock_t publicFunctionLck{mtxForSerializingPublicFunctionCalls};
     auto transaction = std::make_unique<Transaction>(
-        clientContext, TransactionType::READ_ONLY, ++lastTransactionID);
+        clientContext, TransactionType::READ_ONLY, ++lastTransactionID, lastTimestamp);
     activeReadOnlyTransactionIDs.insert(transaction->getID());
     return transaction;
 }
@@ -45,7 +46,6 @@ void TransactionManager::commitButKeepActiveWriteTransaction(Transaction* transa
 
 void TransactionManager::manuallyClearActiveWriteTransaction(Transaction* transaction) {
     lock_t lck{mtxForSerializingPublicFunctionCalls};
-    assertActiveWriteTransactionIsCorrectNoLock(transaction);
     clearActiveWriteTransactionIfWriteTransactionNoLock(transaction);
 }
 
@@ -54,20 +54,13 @@ void TransactionManager::commitOrRollbackNoLock(Transaction* transaction, bool i
         activeReadOnlyTransactionIDs.erase(transaction->getID());
         return;
     }
-    assertActiveWriteTransactionIsCorrectNoLock(transaction);
     if (isCommit) {
-        wal.logCommit(transaction->getID());
+        lastTimestamp++;
+        transaction->commitTS = lastTimestamp;
+        transaction->commit(&wal);
         lastCommitID++;
-    }
-}
-
-void TransactionManager::assertActiveWriteTransactionIsCorrectNoLock(
-    Transaction* transaction) const {
-    if (activeWriteTransactionID != transaction->getID()) {
-        throw TransactionManagerException(
-            "The ID of the committing write transaction " + std::to_string(transaction->getID()) +
-            " is not equal to the ID of the activeWriteTransaction: " +
-            std::to_string(activeWriteTransactionID));
+    } else {
+        transaction->rollback();
     }
 }
 

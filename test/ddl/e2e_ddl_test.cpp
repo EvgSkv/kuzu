@@ -109,8 +109,6 @@ public:
 
     void dropTableCommitAndRecoveryTest(
         std::string tableName, TransactionTestType transactionTestType) {
-        auto tableID = catalog->getTableID(&DUMMY_READ_TRANSACTION, tableName);
-        auto tableSchema = catalog->getTableCatalogEntry(&DUMMY_READ_TRANSACTION, tableID)->copy();
         executeQueryWithoutCommit(stringFormat("DROP TABLE {}", tableName));
         ASSERT_TRUE(catalog->containsTable(&DUMMY_READ_TRANSACTION, tableName));
         if (transactionTestType == TransactionTestType::RECOVERY) {

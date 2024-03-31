@@ -13,7 +13,7 @@ public:
     RelGroupCatalogEntry() = default;
     RelGroupCatalogEntry(std::string tableName, common::table_id_t tableID,
         std::vector<common::table_id_t> relTableIDs);
-    RelGroupCatalogEntry(const RelGroupCatalogEntry& other);
+    //    RelGroupCatalogEntry(const RelGroupCatalogEntry& other);
 
     //===--------------------------------------------------------------------===//
     // getter & setter
@@ -27,7 +27,7 @@ public:
     //===--------------------------------------------------------------------===//
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<RelGroupCatalogEntry> deserialize(common::Deserializer& deserializer);
-    std::unique_ptr<CatalogEntry> copy() const override;
+    //    std::unique_ptr<CatalogEntry> copy() const override;
 
 private:
     std::vector<common::table_id_t> relTableIDs;

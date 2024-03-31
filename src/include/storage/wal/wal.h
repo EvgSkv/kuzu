@@ -6,6 +6,12 @@
 #include "storage/wal/wal_record.h"
 
 namespace kuzu {
+namespace catalog {
+class CatalogEntry;
+}
+namespace common {
+class Serializer;
+}
 namespace storage {
 
 using lock_t = std::unique_lock<std::mutex>;
@@ -73,12 +79,7 @@ public:
     // Destructing WAL flushes any unwritten header page but not the other pages. The caller
     // which possibly has access to the buffer manager needs to ensure any unwritten pages
     // are also flushed to disk.
-    ~WAL() {
-        lock_t lck{mtx};
-        // WAL only keeps track of the current header page. Any prior header pages are already
-        // written to disk. So we only flush the current header page.
-        flushHeaderPages();
-    }
+    ~WAL();
 
     inline std::unique_ptr<WALIterator> getIterator() {
         lock_t lck{mtx};
@@ -98,10 +99,7 @@ public:
 
     void logCatalogRecord();
 
-    void logCreateTableRecord(common::table_id_t tableID, common::TableType tableType);
-    void logCreateRdfGraphRecord(common::table_id_t rdfGraphID, common::table_id_t resourceTableID,
-        common::table_id_t literalTableID, common::table_id_t resourceTripleTableID,
-        common::table_id_t literalTripleTableID);
+    void logCreateTableRecord(catalog::CatalogEntry* catalogEntry);
     void logDropTableRecord(common::table_id_t tableID);
     void logDropPropertyRecord(common::table_id_t tableID, common::property_id_t propertyID);
     void logAddPropertyRecord(common::table_id_t tableID, common::property_id_t propertyID);
@@ -141,6 +139,7 @@ private:
 
     void initCurrentPage();
     void addNewWALRecordNoLock(WALRecord& walRecord);
+    void addCatalogEntry(catalog::CatalogEntry* catalogEntry);
     void setIsLastRecordCommit();
 
 private:

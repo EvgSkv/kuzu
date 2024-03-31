@@ -18,9 +18,6 @@ public:
     TableCatalogEntry() = default;
     TableCatalogEntry(CatalogEntryType catalogType, std::string name, common::table_id_t tableID)
         : CatalogEntry{catalogType, std::move(name)}, tableID{tableID}, nextPID{0} {}
-    TableCatalogEntry(const TableCatalogEntry& other)
-        : CatalogEntry{other}, tableID{other.tableID}, comment{other.comment},
-          nextPID{other.nextPID}, properties{copyVector(other.properties)} {}
     TableCatalogEntry& operator=(const TableCatalogEntry&) = delete;
 
     //===--------------------------------------------------------------------===//

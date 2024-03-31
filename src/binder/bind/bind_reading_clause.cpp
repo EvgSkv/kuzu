@@ -214,9 +214,11 @@ std::unique_ptr<BoundReadingClause> Binder::bindLoadFrom(const ReadingClause& re
                     common::stringFormat("No database named {} has been attached.", dbName)};
             }
             auto tableName = common::StringUtils::split(objectName, "_")[1];
-            auto tableID = attachedDB->getCatalogContent()->getTableID(tableName);
+            auto tableID = attachedDB->getCatalogContent()->getTableID(
+                &transaction::DUMMY_WRITE_TRANSACTION, tableName);
             auto tableCatalogEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
-                attachedDB->getCatalogContent()->getTableCatalogEntry(tableID));
+                attachedDB->getCatalogContent()->getTableCatalogEntry(
+                    &transaction::DUMMY_WRITE_TRANSACTION, tableID));
             scanFunction = tableCatalogEntry->getScanFunction();
             auto bindInput = function::TableFuncBindInput();
             bindData = scanFunction.bindFunc(clientContext, &bindInput);

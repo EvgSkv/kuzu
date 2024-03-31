@@ -21,9 +21,9 @@ std::unique_ptr<ScalarMacroCatalogEntry> ScalarMacroCatalogEntry::deserialize(
     return scalarMacroCatalogEntry;
 }
 
-std::unique_ptr<CatalogEntry> ScalarMacroCatalogEntry::copy() const {
-    return std::make_unique<ScalarMacroCatalogEntry>(getName(), macroFunction->copy());
-}
+// std::unique_ptr<CatalogEntry> ScalarMacroCatalogEntry::copy() const {
+//    return std::make_unique<ScalarMacroCatalogEntry>(getName(), macroFunction->copy());
+//}
 
 std::string ScalarMacroCatalogEntry::toCypher(main::ClientContext* /*clientContext*/) const {
     return macroFunction->toCypher(getName());

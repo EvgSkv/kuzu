@@ -16,10 +16,11 @@ class ClientContext;
 namespace transaction {
 
 class TransactionManager {
-
 public:
+    // Timestamp starts from 1. 0 is reserved for the dummy system transaction.
     explicit TransactionManager(storage::WAL& wal)
-        : wal{wal}, activeWriteTransactionID{INT64_MAX}, lastTransactionID{0}, lastCommitID{0} {};
+        : wal{wal}, lastTransactionID{Transaction::START_TRANSACTION_ID}, lastTimestamp{1},
+          lastCommitID{0} {};
     std::unique_ptr<Transaction> beginWriteTransaction(main::ClientContext& clientContext);
     std::unique_ptr<Transaction> beginReadOnlyTransaction(main::ClientContext& clientContext);
     void commit(Transaction* transaction);
@@ -37,13 +38,14 @@ public:
         lock_t lck{mtxForSerializingPublicFunctionCalls};
         return activeReadOnlyTransactionIDs;
     }
-    inline uint64_t getActiveWriteTransactionID() {
+    inline common::transaction_t getActiveWriteTransactionID() {
         lock_t lck{mtxForSerializingPublicFunctionCalls};
-        return activeWriteTransactionID;
+        KU_ASSERT(activeWriteTransactionID.size() == 1);
+        return *activeWriteTransactionID.begin();
     }
     inline bool hasActiveWriteTransactionID() {
         lock_t lck{mtxForSerializingPublicFunctionCalls};
-        return activeWriteTransactionID != INT64_MAX;
+        return !activeWriteTransactionID.empty();
     }
     inline void setCheckPointWaitTimeoutForTransactionsToLeaveInMicros(uint64_t waitTimeInMicros) {
         checkPointWaitTimeoutForTransactionsToLeaveInMicros = waitTimeInMicros;
@@ -51,32 +53,36 @@ public:
 
 private:
     inline bool hasActiveWriteTransactionNoLock() const {
-        return activeWriteTransactionID != INT64_MAX;
+        return !activeWriteTransactionID.empty();
     }
     inline void clearActiveWriteTransactionIfWriteTransactionNoLock(Transaction* transaction) {
         if (transaction->isWriteTransaction()) {
-            activeWriteTransactionID = INT64_MAX;
+            for (auto& id : activeWriteTransactionID) {
+                if (id == transaction->getID()) {
+                    activeWriteTransactionID.erase(id);
+                    return;
+                }
+            }
         }
     }
     void commitOrRollbackNoLock(Transaction* transaction, bool isCommit);
-    void assertActiveWriteTransactionIsCorrectNoLock(Transaction* transaction) const;
 
 private:
     storage::WAL& wal;
 
-    uint64_t activeWriteTransactionID;
-
+    std::unordered_set<common::transaction_t> activeWriteTransactionID;
     std::unordered_set<uint64_t> activeReadOnlyTransactionIDs;
 
-    uint64_t lastTransactionID;
-
+    common::transaction_t lastTransactionID;
+    common::transaction_t lastTimestamp;
     // ID of the last committed write transaction. This is currently used primarily for
     // debugging purposes during development and is not written to disk in a db file.
     // In particular, transactions do not use this to perform reads. Our current transaction design
     // supports a concurrency model that requires on 2 versions, one for the read-only transactions
     // and the for the writer transaction, so we can read correct version by looking at the type of
     // the transaction.
-    uint64_t lastCommitID;
+    // TODO: Should remove this field.
+    common::transaction_t lastCommitID;
     // This mutex is used to ensure thread safety and letting only one public function to be called
     // at any time except the stopNewTransactionsAndWaitUntilAllReadTransactionsLeave
     // function, which needs to let calls to comming and rollback.

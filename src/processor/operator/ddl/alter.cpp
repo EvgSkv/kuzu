@@ -10,7 +10,8 @@ namespace processor {
 void Alter::executeDDLInternal(ExecutionContext* context) {
     switch (info.alterType) {
     case common::AlterType::ADD_PROPERTY: {
-        context->clientContext->getCatalog()->alterTableSchema(info);
+        context->clientContext->getCatalog()->alterTableSchema(
+            context->clientContext->getTx(), info);
         auto& boundAddPropInfo = common::ku_dynamic_cast<const binder::BoundExtraAlterInfo&,
             const binder::BoundExtraAddPropertyInfo&>(*info.extraInfo);
         KU_ASSERT(defaultValueEvaluator);
@@ -30,7 +31,8 @@ void Alter::executeDDLInternal(ExecutionContext* context) {
         auto tableEntry = context->clientContext->getCatalog()->getTableCatalogEntry(
             context->clientContext->getTx(), info.tableID);
         auto columnID = tableEntry->getColumnID(boundDropPropInfo.propertyID);
-        context->clientContext->getCatalog()->alterTableSchema(info);
+        context->clientContext->getCatalog()->alterTableSchema(
+            context->clientContext->getTx(), info);
         if (tableEntry->getTableType() == common::TableType::NODE) {
             auto nodesStats =
                 context->clientContext->getStorageManager()->getNodesStatisticsAndDeletedIDs();
@@ -41,7 +43,8 @@ void Alter::executeDDLInternal(ExecutionContext* context) {
         }
     } break;
     default: {
-        context->clientContext->getCatalog()->alterTableSchema(info);
+        context->clientContext->getCatalog()->alterTableSchema(
+            context->clientContext->getTx(), info);
         // DO NOTHING.
     }
     }

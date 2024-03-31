@@ -16,7 +16,7 @@ public:
     //===--------------------------------------------------------------------===//
     // serialization & deserialization
     //===--------------------------------------------------------------------===//
-    std::unique_ptr<CatalogEntry> copy() const override;
+    //    std::unique_ptr<CatalogEntry> copy() const override;
 };
 
 } // namespace catalog

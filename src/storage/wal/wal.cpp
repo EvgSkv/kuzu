@@ -1,5 +1,6 @@
 #include "storage/wal/wal.h"
 
+#include "catalog/catalog_entry/catalog_entry.h"
 #include "common/exception/runtime.h"
 #include "common/file_system/virtual_file_system.h"
 #include "storage/storage_utils.h"
@@ -18,6 +19,13 @@ WAL::WAL(const std::string& directory, bool readOnly, BufferManager& bufferManag
                    FileHandle::O_PERSISTENT_FILE_CREATE_NOT_EXISTS,
         BMFileHandle::FileVersionedType::NON_VERSIONED_FILE, vfs);
     initCurrentPage();
+}
+
+WAL::~WAL() {
+    lock_t lck{mtx};
+    // WAL only keeps track of the current header page. Any prior header pages are already
+    // written to disk. So we only flush the current header page.
+    flushHeaderPages();
 }
 
 page_idx_t WAL::logPageUpdateRecord(DBFileID dbFileID, page_idx_t pageIdxInOriginalFile) {
@@ -60,20 +68,11 @@ void WAL::logCatalogRecord() {
     addNewWALRecordNoLock(walRecord);
 }
 
-void WAL::logCreateTableRecord(table_id_t tableID, TableType tableType) {
+void WAL::logCreateTableRecord(catalog::CatalogEntry* catalogEntry) {
     lock_t lck{mtx};
-    KU_ASSERT(tableType == TableType::NODE || tableType == TableType::REL);
-    WALRecord walRecord = WALRecord::newCreateTableRecord(tableID, tableType);
-    addToUpdatedTables(tableID);
-    addNewWALRecordNoLock(walRecord);
-}
-
-void WAL::logCreateRdfGraphRecord(table_id_t rdfGraphID, table_id_t resourceTableID,
-    table_id_t literalTableID, table_id_t resourceTripleTableID, table_id_t literalTripleTableID) {
-    lock_t lck{mtx};
-    WALRecord walRecord = WALRecord::newRdfGraphRecord(
-        rdfGraphID, resourceTableID, literalTableID, resourceTripleTableID, literalTripleTableID);
-    addNewWALRecordNoLock(walRecord);
+    // TODO: Should reuse serializer here, which is not available in WAL.
+    //       `catalogEntry->serialize(*serializer);`
+    addCatalogEntry(catalogEntry);
 }
 
 void WAL::logCopyTableRecord(table_id_t tableID) {
@@ -146,6 +145,10 @@ void WAL::addNewWALRecordNoLock(WALRecord& walRecord) {
     incrementNumRecordsInCurrentHeaderPage();
     walRecord.writeWALRecordToBytes(currentHeaderPageBuffer.get(), offsetInCurrentHeaderPage);
     isLastLoggedRecordCommit_ = (WALRecordType::COMMIT_RECORD == walRecord.recordType);
+}
+
+void WAL::addCatalogEntry(catalog::CatalogEntry* catalogEntry) {
+    // TODO: Implement
 }
 
 void WAL::setIsLastRecordCommit() {

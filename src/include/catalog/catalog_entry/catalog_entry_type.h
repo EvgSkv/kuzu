@@ -16,6 +16,7 @@ enum class CatalogEntryType : uint8_t {
     REWRITE_FUNCTION_ENTRY = 7,
     TABLE_FUNCTION_ENTRY = 8,
     FOREIGN_TABLE_ENTRY = 9,
+    DUMMY_ENTRY = 10,
 };
 
 } // namespace catalog
