@@ -87,8 +87,6 @@ private:
         transaction::Transaction* transaction, const binder::BoundCreateTableInfo& info);
     void dropTable(transaction::Transaction* transaction, common::table_id_t tableID);
     void alterTable(transaction::Transaction* transaction, const binder::BoundAlterInfo& info);
-    void renameTable(transaction::Transaction* transaction, common::table_id_t tableID,
-        const std::string& newName);
 
 private:
     std::unique_ptr<CatalogEntry> createNodeTableEntry(transaction::Transaction* transaction,
@@ -99,6 +97,9 @@ private:
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info);
     std::unique_ptr<CatalogEntry> createRdfGraphEntry(transaction::Transaction* transaction,
         common::table_id_t tableID, const binder::BoundCreateTableInfo& info);
+
+    void alterRdfGraphInternalTables(transaction::Transaction* transaction,
+        const CatalogEntry& tableEntry, const binder::BoundAlterInfo& info);
 
 protected:
     std::unique_ptr<CatalogSet> tables;

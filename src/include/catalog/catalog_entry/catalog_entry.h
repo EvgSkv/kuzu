@@ -16,15 +16,16 @@ public:
     // constructor & destructor
     //===--------------------------------------------------------------------===//
     CatalogEntry() = default;
-    CatalogEntry(CatalogEntryType type, std::string name) : type{type}, name{std::move(name)} {}
+    CatalogEntry(CatalogEntryType type, std::string name)
+        : type{type}, name{std::move(name)}, timestamp{common::INVALID_TRANSACTION} {}
     virtual ~CatalogEntry() = default;
 
     //===--------------------------------------------------------------------===//
     // getter & setter
     //===--------------------------------------------------------------------===//
     CatalogEntryType getType() const { return type; }
+    void rename(std::string name_) { this->name = std::move(name_); }
     std::string getName() const { return name; }
-    void rename(std::string newName) { name = std::move(newName); }
     common::transaction_t getTimestamp() const { return timestamp; }
     void setTimestamp(common::transaction_t timestamp_) { this->timestamp = timestamp_; }
     bool isDeleted() const { return deleted; }
@@ -55,10 +56,13 @@ public:
     static std::unique_ptr<CatalogEntry> deserialize(common::Deserializer& deserializer);
     virtual std::string toCypher(main::ClientContext* /*clientContext*/) const { KU_UNREACHABLE; }
 
-private:
+protected:
+    virtual void copy(CatalogEntry& other) const;
+
+protected:
     CatalogEntryType type;
     std::string name;
-    common::transaction_t timestamp = common::INVALID_TRANSACTION;
+    common::transaction_t timestamp;
     bool deleted = false;
     // Older versions.
     std::unique_ptr<CatalogEntry> prev;

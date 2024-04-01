@@ -11,8 +11,16 @@
 ---- 2
 0|a|INT32|True
 1|b|INT32|False
+-STATEMENT CREATE REL TABLE e1(FROM t TO t);
+---- ok
 -STATEMENT COMMIT;
 ---- ok
+-STATEMENT CREATE REL TABLE e2(FROM t TO t);
+---- ok
+-STATEMENT CALL table_info('e1') RETURN *;
+---- 0
+-STATEMENT CALL table_info('e2') RETURN *;
+---- 0
 
 -CASE CreateTableManualRollback
 -STATEMENT BEGIN TRANSACTION;
@@ -23,7 +31,7 @@
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
 ---- error
-Catalog exception: Table: t does not exist.
+Catalog exception: Table t does not exist.
 
 -CASE CreateTableAutoCommit
 -STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
@@ -61,7 +69,7 @@ Catalog exception: Write-write conflict on creating catalog entry with name t.
 -CREATE_CONNECTION conn2
 -STATEMENT [conn2] CALL table_info('t') RETURN *;
 ---- error
-Catalog exception: Table: t does not exist.
+Catalog exception: Table t does not exist.
 -STATEMENT COMMIT;
 ---- ok
 -STATEMENT [conn2] CALL table_info('t') RETURN *;
@@ -84,7 +92,7 @@ Catalog exception: Table: t does not exist.
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
 ---- error
-Catalog exception: Table: t does not exist.
+Catalog exception: Table t does not exist.
 
 -CASE DropTableRollback
 -STATEMENT BEGIN TRANSACTION;
@@ -103,7 +111,7 @@ Catalog exception: Table: t does not exist.
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
 ---- error
-Catalog exception: Table: t does not exist.
+Catalog exception: Table t does not exist.
 -STATEMENT ROLLBACK;
 ---- ok
 -STATEMENT CALL table_info('t') RETURN *;
@@ -123,7 +131,7 @@ Catalog exception: Table: t does not exist.
 -CREATE_CONNECTION conn2
 -STATEMENT [conn2] CALL table_info('t') RETURN *;
 ---- error
-Catalog exception: Table: t does not exist.
+Catalog exception: Table t does not exist.
 -STATEMENT [conn2] BEGIN TRANSACTION;
 ---- ok
 -STATEMENT [conn2] DROP TABLE t;
@@ -136,6 +144,88 @@ Binder exception: Table t does not exist.
 0|a|INT32|True
 1|b|INT32|False
 
-# Add/Drop property of tables
-# Rename table
-# Rename properties
+-CASE AllColumns
+-SKIP
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT ALTER TABLE t ADD c INT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 3
+0|a|INT32|True
+1|b|INT32|False
+2|c|INT32|False
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT ALTER TABLE t DROP c;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+-CASE RenameTable
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT COMMIT;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t RENAME TO t2;
+---- ok
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT [conn2] CALL table_info('t2') RETURN *;
+---- error
+Catalog exception: Table t2 does not exist.
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT CALL table_info('t') RETURN *;
+---- error
+Catalog exception: Table t does not exist.
+-STATEMENT CALL table_info('t2') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+
+-CASE RenameColumn
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT CREATE NODE TABLE t(a INT, b INT, PRIMARY KEY(a));
+---- ok
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT BEGIN TRANSACTION;
+---- ok
+-STATEMENT ALTER TABLE t RENAME b TO c;
+---- ok
+-CREATE_CONNECTION conn2
+-STATEMENT [conn2] BEGIN TRANSACTION;
+---- ok
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|b|INT32|False
+-STATEMENT COMMIT;
+---- ok
+-STATEMENT [conn2] COMMIT;
+---- ok
+-STATEMENT [conn2] CALL table_info('t') RETURN *;
+---- 2
+0|a|INT32|True
+1|c|INT32|False

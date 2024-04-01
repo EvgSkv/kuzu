@@ -8,11 +8,6 @@ RelGroupCatalogEntry::RelGroupCatalogEntry(
     : TableCatalogEntry{CatalogEntryType::REL_GROUP_ENTRY, std::move(tableName), tableID},
       relTableIDs{std::move(relTableIDs)} {}
 
-// RelGroupCatalogEntry::RelGroupCatalogEntry(const RelGroupCatalogEntry& other)
-//    : TableCatalogEntry{other} {
-//    relTableIDs = other.relTableIDs;
-//}
-
 bool RelGroupCatalogEntry::isParent(common::table_id_t childID) {
     auto it = find_if(relTableIDs.begin(), relTableIDs.end(),
         [&](common::table_id_t relTableID) { return relTableID == childID; });
@@ -33,9 +28,12 @@ std::unique_ptr<RelGroupCatalogEntry> RelGroupCatalogEntry::deserialize(
     return relGroupEntry;
 }
 
-// std::unique_ptr<CatalogEntry> RelGroupCatalogEntry::copy() const {
-//    return std::make_unique<RelGroupCatalogEntry>(*this);
-//}
+std::unique_ptr<TableCatalogEntry> RelGroupCatalogEntry::copy() const {
+    auto other = std::make_unique<RelGroupCatalogEntry>();
+    other->relTableIDs = relTableIDs;
+    TableCatalogEntry::copy(*other);
+    return other;
+}
 
 } // namespace catalog
 } // namespace kuzu

@@ -35,5 +35,12 @@ std::unique_ptr<CatalogEntry> CatalogEntry::deserialize(common::Deserializer& de
     return entry;
 }
 
+void CatalogEntry::copy(CatalogEntry& other) const {
+    other.type = type;
+    other.name = name;
+    other.timestamp = timestamp;
+    other.deleted = deleted;
+}
+
 } // namespace catalog
 } // namespace kuzu

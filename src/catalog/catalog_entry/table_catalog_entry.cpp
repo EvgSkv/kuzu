@@ -1,12 +1,51 @@
 #include "catalog/catalog_entry/table_catalog_entry.h"
 
+#include "binder/ddl/bound_alter_info.h"
 #include "catalog/catalog_entry/node_table_catalog_entry.h"
 #include "catalog/catalog_entry/rdf_graph_catalog_entry.h"
 #include "catalog/catalog_entry/rel_group_catalog_entry.h"
 #include "catalog/catalog_entry/rel_table_catalog_entry.h"
 
+using namespace kuzu::binder;
+using namespace kuzu::common;
+
 namespace kuzu {
 namespace catalog {
+
+std::unique_ptr<TableCatalogEntry> TableCatalogEntry::alter(const BoundAlterInfo& alterInfo) {
+    KU_ASSERT(!deleted);
+    auto newEntry = copy();
+    switch (alterInfo.alterType) {
+    case AlterType::RENAME_TABLE: {
+        auto& renameTableInfo =
+            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenameTableInfo&>(
+                *alterInfo.extraInfo);
+        newEntry->rename(renameTableInfo.newName);
+    } break;
+    case AlterType::RENAME_PROPERTY: {
+        auto& renamePropInfo =
+            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenamePropertyInfo&>(
+                *alterInfo.extraInfo);
+        newEntry->renameProperty(renamePropInfo.propertyID, renamePropInfo.newName);
+    } break;
+    case AlterType::ADD_PROPERTY: {
+        auto& addPropInfo =
+            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraAddPropertyInfo&>(
+                *alterInfo.extraInfo);
+        newEntry->addProperty(addPropInfo.propertyName, addPropInfo.dataType.copy());
+    } break;
+    case AlterType::DROP_PROPERTY: {
+        auto& dropPropInfo =
+            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraDropPropertyInfo&>(
+                *alterInfo.extraInfo);
+        newEntry->dropProperty(dropPropInfo.propertyID);
+    } break;
+    default: {
+        KU_UNREACHABLE;
+    }
+    }
+    return newEntry;
+}
 
 bool TableCatalogEntry::containProperty(const std::string& propertyName) const {
     return std::any_of(properties.begin(), properties.end(),
@@ -58,6 +97,8 @@ void TableCatalogEntry::renameProperty(
     common::property_id_t propertyID, const std::string& newName) {
     auto it = std::find_if(properties.begin(), properties.end(),
         [&propertyID](const auto& property) { return property.getPropertyID() == propertyID; });
+    // TODO(Guodong/Ziyi): Don't we need to check if newName conflicts with any existing ones?
+    //                     Is this checked anywhere in the front-end?
     KU_ASSERT(it != properties.end());
     it->rename(newName);
 }
@@ -102,6 +143,15 @@ std::unique_ptr<TableCatalogEntry> TableCatalogEntry::deserialize(
     result->comment = std::move(comment);
     result->nextPID = nextPID;
     return result;
+}
+
+void TableCatalogEntry::copy(CatalogEntry& other) const {
+    CatalogEntry::copy(other);
+    auto& otherTable = ku_dynamic_cast<CatalogEntry&, TableCatalogEntry&>(other);
+    otherTable.tableID = tableID;
+    otherTable.comment = comment;
+    otherTable.nextPID = nextPID;
+    otherTable.properties = copyVector(properties);
 }
 
 } // namespace catalog

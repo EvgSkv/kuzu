@@ -16,14 +16,6 @@ RelTableCatalogEntry::RelTableCatalogEntry(std::string name, table_id_t tableID,
       srcMultiplicity{srcMultiplicity}, dstMultiplicity{dstMultiplicity}, srcTableID{srcTableID},
       dstTableID{dstTableID} {}
 
-// RelTableCatalogEntry::RelTableCatalogEntry(const RelTableCatalogEntry& other)
-//    : TableCatalogEntry{other} {
-//    srcMultiplicity = other.srcMultiplicity;
-//    dstMultiplicity = other.dstMultiplicity;
-//    srcTableID = other.srcTableID;
-//    dstTableID = other.dstTableID;
-//}
-
 bool RelTableCatalogEntry::isParent(table_id_t tableID) {
     return srcTableID == tableID || dstTableID == tableID;
 }
@@ -74,9 +66,15 @@ std::unique_ptr<RelTableCatalogEntry> RelTableCatalogEntry::deserialize(
     return relTableEntry;
 }
 
-// std::unique_ptr<CatalogEntry> RelTableCatalogEntry::copy() const {
-//    return std::make_unique<RelTableCatalogEntry>(*this);
-//}
+std::unique_ptr<TableCatalogEntry> RelTableCatalogEntry::copy() const {
+    auto other = std::make_unique<RelTableCatalogEntry>();
+    other->srcMultiplicity = srcMultiplicity;
+    other->dstMultiplicity = dstMultiplicity;
+    other->srcTableID = srcTableID;
+    other->dstTableID = dstTableID;
+    TableCatalogEntry::copy(*other);
+    return other;
+}
 
 std::string RelTableCatalogEntry::toCypher(main::ClientContext* clientContext) const {
     std::stringstream ss;

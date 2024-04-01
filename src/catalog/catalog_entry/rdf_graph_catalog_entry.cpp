@@ -12,14 +12,6 @@ RDFGraphCatalogEntry::RDFGraphCatalogEntry(std::string name, common::table_id_t 
       resourceTableID{resourceTableID}, literalTableID{literalTabelID},
       resourceTripleTableID{resourceTripleTableID}, literalTripleTableID{literalTripleTableID} {}
 
-// RDFGraphCatalogEntry::RDFGraphCatalogEntry(const RDFGraphCatalogEntry& other)
-//    : TableCatalogEntry{other} {
-//    resourceTableID = other.resourceTableID;
-//    literalTableID = other.literalTableID;
-//    resourceTripleTableID = other.resourceTripleTableID;
-//    literalTripleTableID = other.literalTripleTableID;
-//}
-
 bool RDFGraphCatalogEntry::isParent(common::table_id_t tableID) {
     return tableID == resourceTableID || tableID == literalTableID ||
            tableID == resourceTripleTableID || tableID == literalTripleTableID;
@@ -67,9 +59,15 @@ std::unique_ptr<RDFGraphCatalogEntry> RDFGraphCatalogEntry::deserialize(
     return rdfGraphEntry;
 }
 
-// std::unique_ptr<CatalogEntry> RDFGraphCatalogEntry::copy() const {
-//    return std::make_unique<RDFGraphCatalogEntry>(*this);
-//}
+std::unique_ptr<TableCatalogEntry> RDFGraphCatalogEntry::copy() const {
+    auto other = std::make_unique<RDFGraphCatalogEntry>();
+    other->resourceTableID = resourceTableID;
+    other->literalTableID = literalTableID;
+    other->resourceTripleTableID = resourceTripleTableID;
+    other->literalTripleTableID = literalTripleTableID;
+    TableCatalogEntry::copy(*other);
+    return other;
+}
 
 } // namespace catalog
 } // namespace kuzu

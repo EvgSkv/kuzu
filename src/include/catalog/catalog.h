@@ -53,8 +53,6 @@ public:
         transaction::Transaction* tx, const binder::BoundCreateTableInfo& info);
     void dropTableSchema(transaction::Transaction* tx, common::table_id_t tableID);
     void alterTableSchema(transaction::Transaction* tx, const binder::BoundAlterInfo& info);
-    void renameTable(
-        transaction::Transaction* tx, common::table_id_t tableID, const std::string& newName);
 
     void setTableComment(
         transaction::Transaction* tx, common::table_id_t tableID, const std::string& comment);

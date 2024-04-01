@@ -8,6 +8,10 @@
 #include "function/table_functions.h"
 
 namespace kuzu {
+namespace binder {
+struct BoundAlterInfo;
+} // namespace binder
+
 namespace catalog {
 
 class KUZU_API TableCatalogEntry : public CatalogEntry {
@@ -19,6 +23,8 @@ public:
     TableCatalogEntry(CatalogEntryType catalogType, std::string name, common::table_id_t tableID)
         : CatalogEntry{catalogType, std::move(name)}, tableID{tableID}, nextPID{0} {}
     TableCatalogEntry& operator=(const TableCatalogEntry&) = delete;
+
+    std::unique_ptr<TableCatalogEntry> alter(const binder::BoundAlterInfo& alterInfo);
 
     //===--------------------------------------------------------------------===//
     // getter & setter
@@ -51,6 +57,10 @@ public:
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<TableCatalogEntry> deserialize(
         common::Deserializer& deserializer, CatalogEntryType type);
+    virtual std::unique_ptr<TableCatalogEntry> copy() const = 0;
+
+protected:
+    void copy(CatalogEntry& other) const override;
 
 protected:
     common::table_id_t tableID;

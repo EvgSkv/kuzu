@@ -23,7 +23,7 @@ public:
     //===--------------------------------------------------------------------===//
     // serialization & deserialization
     //===--------------------------------------------------------------------===//
-//    std::unique_ptr<CatalogEntry> copy() const override;
+    std::unique_ptr<TableCatalogEntry> copy() const override;
 
 private:
     function::TableFunction scanFunction;

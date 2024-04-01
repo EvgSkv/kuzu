@@ -12,9 +12,11 @@ common::TableType DuckDBTableCatalogEntry::getTableType() const {
     return common::TableType::FOREIGN;
 }
 
-//std::unique_ptr<CatalogEntry> DuckDBTableCatalogEntry::copy() const {
-//    return std::make_unique<DuckDBTableCatalogEntry>(*this);
-//}
+std::unique_ptr<TableCatalogEntry> DuckDBTableCatalogEntry::copy() const {
+    auto other = std::make_unique<DuckDBTableCatalogEntry>(name, tableID, scanFunction);
+    TableCatalogEntry::copy(*other);
+    return other;
+}
 
 } // namespace catalog
 } // namespace kuzu

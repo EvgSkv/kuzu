@@ -109,56 +109,11 @@ table_id_t Catalog::createTableSchema(
 }
 
 void Catalog::dropTableSchema(transaction::Transaction* tx, table_id_t tableID) {
-    auto tableEntry = content->getTableCatalogEntry(tx, tableID);
-    switch (tableEntry->getType()) {
-    case CatalogEntryType::REL_GROUP_ENTRY: {
-        auto nodeTableEntry = ku_dynamic_cast<CatalogEntry*, RelGroupCatalogEntry*>(tableEntry);
-        auto relTableIDs = nodeTableEntry->getRelTableIDs();
-        content->dropTable(tx, tableID);
-    } break;
-    case CatalogEntryType::RDF_GRAPH_ENTRY: {
-        auto rdfGraphSchema = ku_dynamic_cast<CatalogEntry*, RDFGraphCatalogEntry*>(tableEntry);
-        auto graphID = rdfGraphSchema->getTableID();
-        auto rtTableID = rdfGraphSchema->getResourceTripleTableID();
-        auto ltTableID = rdfGraphSchema->getLiteralTripleTableID();
-        auto rTableID = rdfGraphSchema->getResourceTableID();
-        auto lTableID = rdfGraphSchema->getLiteralTableID();
-        content->dropTable(tx, rtTableID);
-        content->dropTable(tx, ltTableID);
-        content->dropTable(tx, rTableID);
-        content->dropTable(tx, lTableID);
-        content->dropTable(tx, graphID);
-    } break;
-    default: {
-        content->dropTable(tx, tableID);
-    }
-    }
+    content->dropTable(tx, tableID);
 }
 
 void Catalog::alterTableSchema(transaction::Transaction* transaction, const BoundAlterInfo& info) {
     content->alterTable(transaction, info);
-}
-
-void Catalog::renameTable(
-    transaction::Transaction* tx, table_id_t tableID, const std::string& newName) {
-    auto tableEntry = content->getTableCatalogEntry(tx, tableID);
-    switch (tableEntry->getType()) {
-    case CatalogEntryType::RDF_GRAPH_ENTRY: {
-        auto rdfGraphSchema = ku_dynamic_cast<CatalogEntry*, RDFGraphCatalogEntry*>(tableEntry);
-        content->renameTable(tx, rdfGraphSchema->getResourceTableID(),
-            RDFGraphCatalogEntry::getResourceTableName(newName));
-        content->renameTable(tx, rdfGraphSchema->getLiteralTableID(),
-            RDFGraphCatalogEntry::getLiteralTableName(newName));
-        content->renameTable(tx, rdfGraphSchema->getResourceTripleTableID(),
-            RDFGraphCatalogEntry::getResourceTripleTableName(newName));
-        content->renameTable(tx, rdfGraphSchema->getLiteralTripleTableID(),
-            RDFGraphCatalogEntry::getLiteralTripleTableName(newName));
-        content->renameTable(tx, tableID, newName);
-    } break;
-    default: {
-        content->renameTable(tx, tableID, newName);
-    }
-    }
 }
 
 void Catalog::addFunction(std::string name, function::function_set functionSet) {

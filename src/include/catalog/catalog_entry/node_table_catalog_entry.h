@@ -13,7 +13,6 @@ public:
     NodeTableCatalogEntry() = default;
     NodeTableCatalogEntry(
         std::string name, common::table_id_t tableID, common::property_id_t primaryKeyPID);
-    //    NodeTableCatalogEntry(const NodeTableCatalogEntry& other);
 
     //===--------------------------------------------------------------------===//
     // getter & setter
@@ -32,7 +31,7 @@ public:
     //===--------------------------------------------------------------------===//
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<NodeTableCatalogEntry> deserialize(common::Deserializer& deserializer);
-    //    std::unique_ptr<CatalogEntry> copy() const override;
+    std::unique_ptr<TableCatalogEntry> copy() const override;
     std::string toCypher(main::ClientContext* /*clientContext*/) const override;
 
 private:

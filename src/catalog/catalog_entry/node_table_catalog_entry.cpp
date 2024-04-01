@@ -8,13 +8,6 @@ NodeTableCatalogEntry::NodeTableCatalogEntry(
     : TableCatalogEntry{CatalogEntryType::NODE_TABLE_ENTRY, std::move(name), tableID},
       primaryKeyPID{primaryKeyPID} {}
 
-// NodeTableCatalogEntry::NodeTableCatalogEntry(const NodeTableCatalogEntry& other)
-//    : TableCatalogEntry{other} {
-//    primaryKeyPID = other.primaryKeyPID;
-//    fwdRelTableIDSet = other.fwdRelTableIDSet;
-//    bwdRelTableIDSet = other.bwdRelTableIDSet;
-//}
-
 void NodeTableCatalogEntry::serialize(common::Serializer& serializer) const {
     TableCatalogEntry::serialize(serializer);
     serializer.write(primaryKeyPID);
@@ -37,13 +30,18 @@ std::unique_ptr<NodeTableCatalogEntry> NodeTableCatalogEntry::deserialize(
     return nodeTableEntry;
 }
 
-// std::unique_ptr<CatalogEntry> NodeTableCatalogEntry::copy() const {
-//    return std::make_unique<NodeTableCatalogEntry>(*this);
-//}
-
 std::string NodeTableCatalogEntry::toCypher(main::ClientContext* /*clientContext*/) const {
     return common::stringFormat("CREATE NODE TABLE {} ({} PRIMARY KEY({}));", getName(),
         Property::toCypher(getPropertiesRef()), getPrimaryKey()->getName());
+}
+
+std::unique_ptr<TableCatalogEntry> NodeTableCatalogEntry::copy() const {
+    auto other = std::make_unique<NodeTableCatalogEntry>();
+    other->primaryKeyPID = primaryKeyPID;
+    other->fwdRelTableIDSet = fwdRelTableIDSet;
+    other->bwdRelTableIDSet = bwdRelTableIDSet;
+    TableCatalogEntry::copy(*other);
+    return other;
 }
 
 } // namespace catalog

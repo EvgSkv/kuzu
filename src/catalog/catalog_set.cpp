@@ -1,6 +1,8 @@
 #include "catalog/catalog_set.h"
 
+#include "binder/ddl/bound_alter_info.h"
 #include "catalog/catalog_entry/dummy_catalog_entry.h"
+#include "catalog/catalog_entry/table_catalog_entry.h"
 #include "common/assert.h"
 #include "common/exception/catalog.h"
 #include "common/string_format.h"
@@ -76,7 +78,7 @@ std::unique_ptr<CatalogEntry> CatalogSet::createDummyEntry(std::string name) con
 }
 
 CatalogEntry* CatalogSet::traverseVersionChainsForTransaction(
-    transaction::Transaction* transaction, CatalogEntry* currentEntry) const {
+    Transaction* transaction, CatalogEntry* currentEntry) const {
     while (currentEntry) {
         if (currentEntry->getTimestamp() == transaction->getID()) {
             // This entry is created by the current transaction.
@@ -98,7 +100,7 @@ bool CatalogSet::checkWWConflict(Transaction* transaction, CatalogEntry* entry) 
                entry->getTimestamp() > transaction->getStartTS());
 }
 
-void CatalogSet::dropEntry(transaction::Transaction* transaction, const std::string& name) {
+void CatalogSet::dropEntry(Transaction* transaction, const std::string& name) {
     KU_ASSERT(containsEntry(transaction, name));
     auto entry = getEntry(transaction, name);
     auto tombstone = createDummyEntry(name);
@@ -106,18 +108,32 @@ void CatalogSet::dropEntry(transaction::Transaction* transaction, const std::str
     auto tombstonePtr = tombstone.get();
     emplace(std::move(tombstone));
     if (transaction->getStartTS() > 0) {
-        KU_ASSERT(transaction->getID() != common::INVALID_TRANSACTION);
+        KU_ASSERT(transaction->getID() != INVALID_TRANSACTION);
         transaction->addCatalogEntry(this, tombstonePtr->getPrev());
     }
 }
 
-void CatalogSet::renameEntry(
-    Transaction* transaction, const std::string& oldName, const std::string& newName) {
-    KU_ASSERT(containsEntry(transaction, oldName));
-    auto entry = std::move(entries.at(oldName));
-    entry->rename(newName);
-    entries.erase(oldName);
-    entries.insert_or_assign(newName, std::move(entry));
+void CatalogSet::alterEntry(Transaction* transaction, const binder::BoundAlterInfo& alterInfo) {
+    KU_ASSERT(containsEntry(transaction, alterInfo.tableName));
+    auto entry = getEntry(transaction, alterInfo.tableName);
+    KU_ASSERT(entry->getType() == CatalogEntryType::NODE_TABLE_ENTRY ||
+              entry->getType() == CatalogEntryType::REL_TABLE_ENTRY ||
+              entry->getType() == CatalogEntryType::REL_GROUP_ENTRY ||
+              entry->getType() == CatalogEntryType::RDF_GRAPH_ENTRY);
+    auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(entry);
+    auto newEntry = tableEntry->alter(alterInfo);
+    newEntry->setTimestamp(transaction->getID());
+    if (alterInfo.alterType == AlterType::RENAME_TABLE) {
+        // We treat rename table as drop and create.
+        dropEntry(transaction, alterInfo.tableName);
+        createEntry(transaction, std::move(newEntry));
+    } else {
+        emplace(std::move(newEntry));
+    }
+    if (transaction->getStartTS() > 0) {
+        KU_ASSERT(transaction->getID() != INVALID_TRANSACTION);
+        transaction->addCatalogEntry(this, entry);
+    }
 }
 
 case_insensitive_map_t<CatalogEntry*> CatalogSet::getEntries(Transaction* transaction) {

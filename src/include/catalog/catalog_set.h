@@ -4,6 +4,10 @@
 #include "common/case_insensitive_map.h"
 
 namespace kuzu {
+namespace binder {
+struct BoundAlterInfo;
+} // namespace binder
+
 namespace storage {
 class UndoBuffer;
 } // namespace storage
@@ -22,8 +26,7 @@ public:
     KUZU_API void createEntry(
         transaction::Transaction* transaction, std::unique_ptr<CatalogEntry> entry);
     void dropEntry(transaction::Transaction* transaction, const std::string& name);
-    void renameEntry(transaction::Transaction* transaction, const std::string& oldName,
-        const std::string& newName);
+    void alterEntry(transaction::Transaction* transaction, const binder::BoundAlterInfo& alterInfo);
     common::case_insensitive_map_t<CatalogEntry*> getEntries(transaction::Transaction* transaction);
 
     //===--------------------------------------------------------------------===//

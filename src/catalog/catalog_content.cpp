@@ -146,69 +146,66 @@ std::unique_ptr<CatalogEntry> CatalogContent::createRdfGraphEntry(
 
 void CatalogContent::dropTable(transaction::Transaction* tx, common::table_id_t tableID) {
     auto tableEntry = getTableCatalogEntry(tx, tableID);
-    if (tableEntry->getType() == CatalogEntryType::REL_GROUP_ENTRY) {
+    switch (tableEntry->getType()) {
+    case CatalogEntryType::REL_GROUP_ENTRY: {
         auto relGroupEntry = ku_dynamic_cast<CatalogEntry*, RelGroupCatalogEntry*>(tableEntry);
         for (auto& relTableID : relGroupEntry->getRelTableIDs()) {
             dropTable(tx, relTableID);
         }
+    } break;
+    case CatalogEntryType::RDF_GRAPH_ENTRY: {
+        auto rdfGraphSchema = ku_dynamic_cast<CatalogEntry*, RDFGraphCatalogEntry*>(tableEntry);
+        dropTable(tx, rdfGraphSchema->getResourceTableID());
+        dropTable(tx, rdfGraphSchema->getLiteralTableID());
+        dropTable(tx, rdfGraphSchema->getResourceTripleTableID());
+        dropTable(tx, rdfGraphSchema->getLiteralTripleTableID());
+    } break;
+    default: {
+        // DO NOTHING.
+    }
     }
     tables->dropEntry(tx, tableEntry->getName());
 }
 
 void CatalogContent::alterTable(transaction::Transaction* transaction, const BoundAlterInfo& info) {
-    switch (info.alterType) {
-    case AlterType::RENAME_TABLE: {
-        auto& renameInfo =
-            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenameTableInfo&>(
-                *info.extraInfo);
-        renameTable(transaction, info.tableID, renameInfo.newName);
-    } break;
-    case AlterType::ADD_PROPERTY: {
-        auto& addPropInfo =
-            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraAddPropertyInfo&>(
-                *info.extraInfo);
-        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
-            getTableCatalogEntry(transaction, info.tableID));
-        tableEntry->addProperty(addPropInfo.propertyName, addPropInfo.dataType.copy());
-    } break;
-    case AlterType::RENAME_PROPERTY: {
-        auto& renamePropInfo =
-            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenamePropertyInfo&>(
-                *info.extraInfo);
-        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
-            getTableCatalogEntry(transaction, info.tableID));
-        tableEntry->renameProperty(renamePropInfo.propertyID, renamePropInfo.newName);
-    } break;
-    case AlterType::DROP_PROPERTY: {
-        auto& dropPropInfo =
-            ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraDropPropertyInfo&>(
-                *info.extraInfo);
-        auto tableEntry = ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(
-            getTableCatalogEntry(transaction, info.tableID));
-        tableEntry->dropProperty(dropPropInfo.propertyID);
-    } break;
-    default: {
-        KU_UNREACHABLE;
+    auto tableEntry = getTableCatalogEntry(transaction, info.tableID);
+    KU_ASSERT(tableEntry);
+    if (tableEntry->getType() == CatalogEntryType::RDF_GRAPH_ENTRY) {
+        alterRdfGraphInternalTables(transaction, *tableEntry, info);
     }
-    }
+    tables->alterEntry(transaction, info);
 }
 
-void CatalogContent::renameTable(
-    transaction::Transaction* transaction, table_id_t tableID, const std::string& newName) {
-    // TODO(Xiyang/Ziyi): Do we allow renaming of rel table groups?
-    auto tableEntry = getTableCatalogEntry(transaction, tableID);
-    if (tableEntry->getType() == CatalogEntryType::RDF_GRAPH_ENTRY) {
-        auto rdfGraphEntry = ku_dynamic_cast<CatalogEntry*, RDFGraphCatalogEntry*>(tableEntry);
-        renameTable(transaction, rdfGraphEntry->getResourceTableID(),
-            RDFGraphCatalogEntry::getResourceTableName(newName));
-        renameTable(transaction, rdfGraphEntry->getLiteralTableID(),
-            RDFGraphCatalogEntry::getLiteralTableName(newName));
-        renameTable(transaction, rdfGraphEntry->getResourceTripleTableID(),
-            RDFGraphCatalogEntry::getResourceTripleTableName(newName));
-        renameTable(transaction, rdfGraphEntry->getLiteralTripleTableID(),
-            RDFGraphCatalogEntry::getLiteralTripleTableName(newName));
-    }
-    tables->renameEntry(transaction, tableEntry->getName(), newName);
+void CatalogContent::alterRdfGraphInternalTables(transaction::Transaction* transaction,
+    const CatalogEntry& entry, const binder::BoundAlterInfo& info) {
+    auto& rdfGraphEntry = ku_dynamic_cast<const CatalogEntry&, const RDFGraphCatalogEntry&>(entry);
+    auto& boundRenameInfo =
+        ku_dynamic_cast<const BoundExtraAlterInfo&, const BoundExtraRenameTableInfo&>(
+            *info.extraInfo);
+    BoundAlterInfo resourceTableRenameInfo(AlterType::RENAME_TABLE,
+        RDFGraphCatalogEntry::getResourceTableName(rdfGraphEntry.getName()),
+        rdfGraphEntry.getResourceTableID(),
+        std::make_unique<BoundExtraRenameTableInfo>(
+            RDFGraphCatalogEntry::getResourceTableName(boundRenameInfo.newName)));
+    tables->alterEntry(transaction, resourceTableRenameInfo);
+    BoundAlterInfo literalTableRenameInfo(AlterType::RENAME_TABLE,
+        RDFGraphCatalogEntry::getLiteralTableName(rdfGraphEntry.getName()),
+        rdfGraphEntry.getLiteralTableID(),
+        std::make_unique<BoundExtraRenameTableInfo>(
+            RDFGraphCatalogEntry::getLiteralTableName(boundRenameInfo.newName)));
+    tables->alterEntry(transaction, literalTableRenameInfo);
+    BoundAlterInfo resourceTripleTableRenameInfo(AlterType::RENAME_TABLE,
+        RDFGraphCatalogEntry::getResourceTripleTableName(rdfGraphEntry.getName()),
+        rdfGraphEntry.getResourceTripleTableID(),
+        std::make_unique<BoundExtraRenameTableInfo>(
+            RDFGraphCatalogEntry::getResourceTripleTableName(boundRenameInfo.newName)));
+    tables->alterEntry(transaction, resourceTripleTableRenameInfo);
+    BoundAlterInfo literalTripleTableRenameInfo(AlterType::RENAME_TABLE,
+        RDFGraphCatalogEntry::getLiteralTripleTableName(rdfGraphEntry.getName()),
+        rdfGraphEntry.getLiteralTripleTableID(),
+        std::make_unique<BoundExtraRenameTableInfo>(
+            RDFGraphCatalogEntry::getLiteralTripleTableName(boundRenameInfo.newName)));
+    tables->alterEntry(transaction, literalTripleTableRenameInfo);
 }
 
 static void validateStorageVersion(storage_version_t savedStorageVersion) {
@@ -321,7 +318,7 @@ common::table_id_t CatalogContent::getTableID(
         return ku_dynamic_cast<CatalogEntry*, TableCatalogEntry*>(tables->getEntry(tx, tableName))
             ->getTableID();
     } else {
-        throw CatalogException{stringFormat("Table: {} does not exist.", tableName)};
+        throw CatalogException{stringFormat("Table {} does not exist.", tableName)};
     }
 }
 

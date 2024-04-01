@@ -16,7 +16,6 @@ public:
     RelTableCatalogEntry(std::string name, common::table_id_t tableID,
         common::RelMultiplicity srcMultiplicity, common::RelMultiplicity dstMultiplicity,
         common::table_id_t srcTableID, common::table_id_t dstTableID);
-    //    RelTableCatalogEntry(const RelTableCatalogEntry& other);
 
     //===--------------------------------------------------------------------===//
     // getter & setter
@@ -36,7 +35,7 @@ public:
     //===--------------------------------------------------------------------===//
     void serialize(common::Serializer& serializer) const override;
     static std::unique_ptr<RelTableCatalogEntry> deserialize(common::Deserializer& deserializer);
-    //    std::unique_ptr<CatalogEntry> copy() const override;
+    std::unique_ptr<TableCatalogEntry> copy() const override;
     std::string toCypher(main::ClientContext* clientContext) const override;
 
 private:
