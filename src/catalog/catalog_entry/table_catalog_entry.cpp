@@ -97,8 +97,6 @@ void TableCatalogEntry::renameProperty(
     common::property_id_t propertyID, const std::string& newName) {
     auto it = std::find_if(properties.begin(), properties.end(),
         [&propertyID](const auto& property) { return property.getPropertyID() == propertyID; });
-    // TODO(Guodong/Ziyi): Don't we need to check if newName conflicts with any existing ones?
-    //                     Is this checked anywhere in the front-end?
     KU_ASSERT(it != properties.end());
     it->rename(newName);
 }

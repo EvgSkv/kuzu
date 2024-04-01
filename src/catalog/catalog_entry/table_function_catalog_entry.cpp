@@ -10,10 +10,5 @@ TableFunctionCatalogEntry::TableFunctionCatalogEntry(
     : FunctionCatalogEntry{
           CatalogEntryType::TABLE_FUNCTION_ENTRY, std::move(name), std::move(functionSet)} {}
 
-// std::unique_ptr<CatalogEntry> TableFunctionCatalogEntry::copy() const {
-//    return std::make_unique<TableFunctionCatalogEntry>(getName(),
-//    common::copyVector(functionSet));
-//}
-
 } // namespace catalog
 } // namespace kuzu

@@ -12,11 +12,6 @@ public:
     //===--------------------------------------------------------------------===//
     TableFunctionCatalogEntry() = default;
     TableFunctionCatalogEntry(std::string name, function::function_set functionSet);
-
-    //===--------------------------------------------------------------------===//
-    // serialization & deserialization
-    //===--------------------------------------------------------------------===//
-    //    std::unique_ptr<CatalogEntry> copy() const override;
 };
 
 } // namespace catalog
