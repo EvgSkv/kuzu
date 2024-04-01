@@ -146,6 +146,7 @@ struct KUZU_API BlobVector {
     }
 };
 
+// Currently, ListVector is used for both VAR_LIST and ARRAY physical type
 class KUZU_API ListVector {
 public:
     static void setDataVector(const ValueVector* vector, std::shared_ptr<ValueVector> dataVector) {

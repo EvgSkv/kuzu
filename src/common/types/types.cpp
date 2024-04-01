@@ -98,8 +98,13 @@ uint32_t PhysicalTypeUtils::getFixedTypeSize(PhysicalTypeID physicalType) {
     }
 }
 
-bool ListTypeInfo::operator==(const ListTypeInfo& other) const {
-    return *childType == *other.childType;
+bool ListTypeInfo::operator==(const ExtraTypeInfo& other) const {
+    const ListTypeInfo* otherListTypeInfo =
+        ku_dynamic_cast<const ExtraTypeInfo*, const ListTypeInfo*>(&other);
+    if (otherListTypeInfo) {
+        return *childType == *otherListTypeInfo->childType;
+    }
+    return false;
 }
 
 std::unique_ptr<ExtraTypeInfo> ListTypeInfo::copy() const {
@@ -114,8 +119,14 @@ void ListTypeInfo::serializeInternal(Serializer& serializer) const {
     childType->serialize(serializer);
 }
 
-bool ArrayTypeInfo::operator==(const ArrayTypeInfo& other) const {
-    return *childType == *other.childType && numElements == other.numElements;
+bool ArrayTypeInfo::operator==(const ExtraTypeInfo& other) const {
+    const ArrayTypeInfo* otherArrayTypeInfo =
+        ku_dynamic_cast<const ExtraTypeInfo*, const ArrayTypeInfo*>(&other);
+    if (otherArrayTypeInfo) {
+        return *childType == *otherArrayTypeInfo->childType &&
+               numElements == otherArrayTypeInfo->numElements;
+    }
+    return false;
 }
 
 std::unique_ptr<ExtraTypeInfo> ArrayTypeInfo::deserialize(Deserializer& deserializer) {
@@ -225,16 +236,21 @@ std::vector<const StructField*> StructTypeInfo::getStructFields() const {
     return structFields;
 }
 
-bool StructTypeInfo::operator==(const StructTypeInfo& other) const {
-    if (fields.size() != other.fields.size()) {
-        return false;
-    }
-    for (auto i = 0u; i < fields.size(); ++i) {
-        if (fields[i] != other.fields[i]) {
+bool StructTypeInfo::operator==(const ExtraTypeInfo& other) const {
+    const StructTypeInfo* otherStructTypeInfo =
+        ku_dynamic_cast<const ExtraTypeInfo*, const StructTypeInfo*>(&other);
+    if (otherStructTypeInfo) {
+        if (fields.size() != otherStructTypeInfo->fields.size()) {
             return false;
         }
+        for (auto i = 0u; i < fields.size(); ++i) {
+            if (fields[i] != otherStructTypeInfo->fields[i]) {
+                return false;
+            }
+        }
+        return true;
     }
-    return true;
+    return false;
 }
 
 std::unique_ptr<ExtraTypeInfo> StructTypeInfo::deserialize(Deserializer& deserializer) {
@@ -288,19 +304,10 @@ bool LogicalType::operator==(const LogicalType& other) const {
     if (typeID != other.typeID) {
         return false;
     }
-    switch (other.getPhysicalType()) {
-    case PhysicalTypeID::LIST:
-        return *ku_dynamic_cast<ExtraTypeInfo*, ListTypeInfo*>(extraTypeInfo.get()) ==
-               *ku_dynamic_cast<ExtraTypeInfo*, ListTypeInfo*>(other.extraTypeInfo.get());
-    case PhysicalTypeID::ARRAY:
-        return *ku_dynamic_cast<ExtraTypeInfo*, ArrayTypeInfo*>(extraTypeInfo.get()) ==
-               *ku_dynamic_cast<ExtraTypeInfo*, ArrayTypeInfo*>(other.extraTypeInfo.get());
-    case PhysicalTypeID::STRUCT:
-        return *ku_dynamic_cast<ExtraTypeInfo*, StructTypeInfo*>(extraTypeInfo.get()) ==
-               *ku_dynamic_cast<ExtraTypeInfo*, StructTypeInfo*>(other.extraTypeInfo.get());
-    default:
-        return true;
+    if (extraTypeInfo) {
+        return *extraTypeInfo == *other.extraTypeInfo;
     }
+    return true;
 }
 
 bool LogicalType::operator!=(const LogicalType& other) const {

@@ -175,6 +175,8 @@ public:
 
     inline void serialize(Serializer& serializer) const { serializeInternal(serializer); }
 
+    virtual bool operator==(const ExtraTypeInfo& other) const = 0;
+
     virtual std::unique_ptr<ExtraTypeInfo> copy() const = 0;
 
 protected:
@@ -187,7 +189,7 @@ public:
     explicit ListTypeInfo(std::unique_ptr<LogicalType> childType)
         : childType{std::move(childType)} {}
     inline LogicalType* getChildType() const { return childType.get(); }
-    bool operator==(const ListTypeInfo& other) const;
+    bool operator==(const ExtraTypeInfo& other) const override;
     std::unique_ptr<ExtraTypeInfo> copy() const override;
 
     static std::unique_ptr<ExtraTypeInfo> deserialize(Deserializer& deserializer);
@@ -205,7 +207,7 @@ public:
     explicit ArrayTypeInfo(std::unique_ptr<LogicalType> childType, uint64_t numElements)
         : ListTypeInfo{std::move(childType)}, numElements{numElements} {}
     inline uint64_t getNumElements() const { return numElements; }
-    bool operator==(const ArrayTypeInfo& other) const;
+    bool operator==(const ExtraTypeInfo& other) const override;
     static std::unique_ptr<ExtraTypeInfo> deserialize(Deserializer& deserializer);
     std::unique_ptr<ExtraTypeInfo> copy() const override;
 
@@ -254,7 +256,7 @@ public:
     std::vector<LogicalType*> getChildrenTypes() const;
     std::vector<std::string> getChildrenNames() const;
     std::vector<const StructField*> getStructFields() const;
-    bool operator==(const kuzu::common::StructTypeInfo& other) const;
+    bool operator==(const ExtraTypeInfo& other) const override;
 
     static std::unique_ptr<ExtraTypeInfo> deserialize(Deserializer& deserializer);
     std::unique_ptr<ExtraTypeInfo> copy() const override;
