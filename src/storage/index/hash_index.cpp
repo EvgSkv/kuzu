@@ -1,12 +1,10 @@
 #include "storage/index/hash_index.h"
 
 #include <cstdint>
-#include <iostream>
 #include <optional>
 #include <type_traits>
 
 #include "common/assert.h"
-#include "common/cast.h"
 #include "common/exception/runtime.h"
 #include "common/string_format.h"
 #include "common/string_utils.h"
@@ -202,8 +200,6 @@ bool HashIndex<T>::lookupInPersistentIndex(TransactionType trxType, Key key, off
             return true;
         }
     } while (nextChainedSlot(trxType, iter));
-    // std::cout << toString(TransactionType::WRITE);
-    // validateEntries(TransactionType::WRITE);
     return false;
 }
 
@@ -462,16 +458,17 @@ void HashIndex<T>::reserve(uint64_t newEntries) {
 template<typename T>
 void HashIndex<T>::mergeBulkInserts() {
     // TODO: Ideally we can split slots at the same time that we insert new ones
-    // Resizing the pSlots diskArray does a write for each added slot, so we don't want to do that
-    // Just compute the new number of primary slots, and iterate over each slot, determining if it
+    // Compute the new number of primary slots, and iterate over each slot, determining if it
     // needs to be split (and how many times, which is complicated) and insert/rehash each element
-    // one by one. Rehashed entries should be copied into a new slot and then that new slot (with
-    // the entries from the respective slot in the local storage) should be processed immediately to
-    // avoid increasing memory usage.
+    // one by one. Rehashed entries should be copied into a new slot in-memory, and then that new
+    // slot (with the entries from the respective slot in the local storage) should be processed
+    // immediately to avoid increasing memory usage (caching one page of slots at a time since split
+    // slots usually get rehashed to a new page).
     //
     // On the other hand, two passes may not be significantly slower than one
+    // TODO: one pass would also reduce locking when frames are unpinned,
+    // which is useful if this can be paralellized
     reserve(bulkInsertLocalStorage.size());
-    // TODO: Remove; they should be equivalent after reserve
     KU_ASSERT(
         bulkInsertLocalStorage.pSlots->size() == pSlots->getNumElements(TransactionType::WRITE));
     KU_ASSERT(this->indexHeaderForWriteTrx->currentLevel ==
@@ -492,11 +489,6 @@ void HashIndex<T>::mergeBulkInserts() {
     // those one at a time into the disk slots. That will keep the low memory requirements and still
     // let us update each on-disk slot one at a time.
 
-    // TODO: This will write to the WAL file for every slot visited
-    // If the primary slot is already full, it will not need to be written,
-    // but we would only want to skip the write if no primary slots on the page are modified
-    // It may be faster just to assume we will write, since after the reserve there should generally
-    // be sufficient space
     auto diskSlotIterator = pSlots->iter();
     // TODO: Use a separate random access iterator and one that's sequential for adding new overflow
     // slots All new slots will be sequential and benefit from caching, but for existing randomly

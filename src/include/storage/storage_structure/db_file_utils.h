@@ -30,7 +30,7 @@ public:
     constexpr static common::page_idx_t NULL_PAGE_IDX = common::INVALID_PAGE_IDX;
 
 public:
-    // TODO(bmwinger): this shouldn't be public. It would be better to provide a scoped object.
+    // Where possible, updatePage/insertNewPage should be used instead
     static WALPageIdxAndFrame createWALVersionIfNecessaryAndPinPage(
         common::page_idx_t originalPageIdx, bool insertingNewPage, BMFileHandle& fileHandle,
         DBFileID dbFileID, BufferManager& bufferManager, WAL& wal);

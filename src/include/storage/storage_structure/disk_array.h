@@ -139,15 +139,11 @@ public:
 
     virtual void prepareCommit();
 
-    // Write iterator for making fast bulk changes to the disk array
-    // The header is only updated when the iterator goes out of scope, and the pages are cached
-    // while the elements are stored on the same page
+    // Write Iterator for making fast bulk changes to the disk array
+    // The pages are cached while the elements are stored on the same page
     // Designed for sequential writes, but supports random writes too (at the cost that the page
     // caching is only beneficial when seeking from one element to another on the same page)
-    // TODO(bmwinger): The disk array in general could benefit from caching the last PIP and from
-    // caching the write header It would require adding a prepareCommit function to flush the cached
-    // values.
-    struct iterator {
+    struct Iterator {
         BaseDiskArrayInternal& diskArray;
         PageCursor apCursor;
         uint32_t valueSize;
@@ -160,10 +156,10 @@ public:
         uint64_t idx;
         uint64_t originalNumElements;
         std::unique_lock<std::shared_mutex> lock;
-        DEFAULT_BOTH_MOVE(iterator);
+        DEFAULT_BOTH_MOVE(Iterator);
 
-        // Constructs iterator in an invalid state. Seek must be called before accessing data
-        iterator(uint32_t valueSize, BaseDiskArrayInternal& diskArray,
+        // Constructs Iterator in an invalid state. Seek must be called before accessing data
+        Iterator(uint32_t valueSize, BaseDiskArrayInternal& diskArray,
             std::unique_lock<std::shared_mutex>&& lock)
             : diskArray(diskArray), apCursor(),
               valueSize(valueSize), walPageIdxAndFrame{common::INVALID_PAGE_IDX,
@@ -171,7 +167,7 @@ public:
               idx(0), originalNumElements(diskArray.getNumElementsNoLock(TRX_TYPE)),
               lock(std::move(lock)) {}
 
-        inline iterator& seek(size_t newIdx) {
+        inline Iterator& seek(size_t newIdx) {
             auto originalPageIdx = apCursor.pageIdx;
             idx = newIdx;
             apCursor = diskArray.getAPIdxAndOffsetInAP(idx);
@@ -188,11 +184,6 @@ public:
             idx = diskArray.headerForWriteTrx.numElements++;
             apCursor = diskArray.getAPIdxAndOffsetInAP(idx);
             // If this would add a new page, pin new page and update PIP
-            // TODO(bmwinger): the PIP could also be cached to avoid updating it more frequently
-            // than necessary, which could reduce BM writes by almost half. Currently the BM is
-            // accessed once per new page and once to update the PIP, but we could reduce by only
-            // updating the PIP when the iterator is done or when we need to add a new PIP (which is
-            // much less frequently than once per new AP)
             auto [apPageIdx, isNewlyAdded] =
                 diskArray.getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
                     &diskArray.headerForWriteTrx, apCursor.pageIdx);
@@ -202,9 +193,9 @@ public:
             }
         }
 
-        inline iterator& operator+=(size_t increment) { return seek(idx + increment); }
+        inline Iterator& operator+=(size_t increment) { return seek(idx + increment); }
 
-        ~iterator() { unpin(); }
+        ~Iterator() { unpin(); }
 
         std::span<uint8_t> operator*() const {
             KU_ASSERT(idx < diskArray.headerForWriteTrx.numElements);
@@ -216,8 +207,6 @@ public:
 
     private:
         inline void unpin() {
-            // TODO(bmwinger): this should be moved into WALPageIdxAndFrame's destructor (or
-            // something similar)
             auto& bmFileHandle =
                 common::ku_dynamic_cast<FileHandle&, BMFileHandle&>(diskArray.fileHandle);
             if (walPageIdxAndFrame.pageIdxInWAL != common::INVALID_PAGE_IDX) {
@@ -249,7 +238,7 @@ public:
         }
     };
 
-    iterator iter(uint64_t valueSize);
+    Iterator iter(uint64_t valueSize);
 
 protected:
     // Updates to new pages (new to this transaction) bypass the wal file.
@@ -377,18 +366,18 @@ public:
     inline void rollbackInMemoryIfNecessary() { diskArray.rollbackInMemoryIfNecessary(); }
     inline void prepareCommit() { diskArray.prepareCommit(); }
 
-    class iterator {
+    class Iterator {
     public:
-        explicit iterator(BaseDiskArrayInternal::iterator&& iter) : iter(std::move(iter)) {}
+        explicit Iterator(BaseDiskArrayInternal::Iterator&& iter) : iter(std::move(iter)) {}
         inline U& operator*() { return *reinterpret_cast<U*>((*iter).data()); }
-        DELETE_COPY_DEFAULT_MOVE(iterator);
+        DELETE_COPY_DEFAULT_MOVE(Iterator);
 
-        inline iterator& operator+=(size_t dist) {
+        inline Iterator& operator+=(size_t dist) {
             iter += dist;
             return *this;
         }
 
-        inline iterator& seek(size_t idx) {
+        inline Iterator& seek(size_t idx) {
             iter.seek(idx);
             return *this;
         }
@@ -400,10 +389,10 @@ public:
         inline uint64_t size() const { return iter.size(); }
 
     private:
-        BaseDiskArrayInternal::iterator iter;
+        BaseDiskArrayInternal::Iterator iter;
     };
 
-    inline iterator iter() { return iterator{diskArray.iter(sizeof(U))}; }
+    inline Iterator iter() { return Iterator{diskArray.iter(sizeof(U))}; }
 
 private:
     BaseDiskArrayInternal diskArray;

@@ -133,19 +133,8 @@ public:
         oSlots = std::make_unique<InMemDiskArrayBuilder<Slot<T>>>(dummy, 0, 1, true);
     }
 
-    // TODO: this will use almost as much memory as the entire index including already written
-    // values and new values Replacing with a vector<vector<tuple<S, offset_t, hash_t>>> will be
-    // much more memory efficient (24 bytes per primary slot instead of 256), though I'm not sure if
-    // it will be faster Alternatively, what if we don't reserve the same number of slots on disk?
-    // We can still benefit from the fact that all entries for a single slot in the destination will
-    // be sourced from the same slot in-memory, so for each entry in slot x, find destination slot y
-    // and then scan the rest of slot x for other slots that also go to y before continuing. It's
-    // worst case quadratic in the number of entries to insert, but in practice shouldn't be very
-    // bad since it only writes to each page once and there are a limited number of entries per
-    // primary slot (though it's still possible for collisions to result in them all ending up in
-    // one, but all having different destination slots, in which case the performance will be bad).
-    // TODO: vector is not memory stable, so adding overflow slots will cause the iterator to become
-    // invalid But the iterator could just store the slot info; access into vector is fast
+    // TODO: might be more efficient to use a vector for each slot since this is now only needed
+    // in-memory and it would remove the need to handle overflow slots.
     OverflowFileHandle* overflowFileHandle;
     FileHandle dummy;
     std::unique_ptr<InMemDiskArrayBuilder<Slot<T>>> pSlots;

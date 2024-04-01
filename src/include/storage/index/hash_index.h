@@ -125,7 +125,6 @@ private:
 
     void forEach(transaction::TransactionType trxType,
         std::function<void(slot_id_t, uint8_t, SlotEntry<T>)> func);
-    // TODO: If locking is removed from the disk arrays, then many of these functions could be const
     std::string toString(transaction::TransactionType trxType);
     void validateEntries(transaction::TransactionType trxType);
     void validateBulkInserts();
@@ -146,7 +145,6 @@ private:
         transaction::TransactionType /*trxType*/, Key keyToLookup, const T& keyInEntry) const {
         return keyToLookup == keyInEntry;
     }
-    // TODO: Replace with separate copy and insert functions
     template<typename K, bool isCopyEntry>
     void copyAndUpdateSlotHeader(
         Slot<T>& slot, entry_pos_t entryPos, K key, common::offset_t value, uint8_t fingerprint) {

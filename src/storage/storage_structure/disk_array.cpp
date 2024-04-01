@@ -340,9 +340,9 @@ BaseDiskArrayInternal::getAPPageIdxAndAddAPToPIPIfNecessaryForWriteTrxNoLock(
     }
 }
 
-BaseDiskArrayInternal::iterator BaseDiskArrayInternal::iter(uint64_t valueSize) {
+BaseDiskArrayInternal::Iterator BaseDiskArrayInternal::iter(uint64_t valueSize) {
     std::unique_lock xLck{diskArraySharedMtx};
-    return BaseDiskArrayInternal::iterator(valueSize, *this, std::move(xLck));
+    return BaseDiskArrayInternal::Iterator(valueSize, *this, std::move(xLck));
 }
 
 BaseInMemDiskArray::BaseInMemDiskArray(FileHandle& fileHandle, DBFileID dbFileID,
