@@ -1150,6 +1150,9 @@ bool LogicalTypeUtils::tryGetMaxLogicalTypeID(
         return true;
     } else if (internalTypeOrder(left) > internalTypeOrder(right)) {
         return tryGetMaxLogicalTypeID(right, left, result);
+    } else if (left == LogicalTypeID::ANY) {
+        result = right;
+        return true;
     } else if (right == LogicalTypeID::STRING) {
         result = left; // special case
         return true;
@@ -1302,6 +1305,14 @@ static bool tryCombineUnionTypes(
 
 bool LogicalTypeUtils::tryGetMaxLogicalType(
     const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    if (left.typeID == LogicalTypeID::ANY) {
+        result = right;
+        return true;
+    }
+    if (right.typeID == LogicalTypeID::ANY) {
+        result = left;
+        return true;
+    }
     if (isNested(left) || isNested(right)) {
         if (!isNested(left) || !isNested(right)) {
             return false;
