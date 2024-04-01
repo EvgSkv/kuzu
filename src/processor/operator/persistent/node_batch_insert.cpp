@@ -12,7 +12,7 @@ using namespace kuzu::storage;
 namespace kuzu {
 namespace processor {
 
-void NodeBatchInsertSharedState::initPKIndex(kuzu::processor::ExecutionContext* context) {
+void NodeBatchInsertSharedState::initPKIndex(kuzu::processor::ExecutionContext* /*context*/) {
     KU_ASSERT(pkType.getLogicalTypeID() != LogicalTypeID::SERIAL);
     uint64_t numRows;
     if (readerSharedState != nullptr) {

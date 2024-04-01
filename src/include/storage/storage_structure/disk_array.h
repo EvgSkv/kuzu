@@ -156,7 +156,7 @@ public:
         uint64_t idx;
         uint64_t originalNumElements;
         std::unique_lock<std::shared_mutex> lock;
-        DEFAULT_BOTH_MOVE(Iterator);
+        DEFAULT_MOVE_CONSTRUCT(Iterator);
 
         // Constructs Iterator in an invalid state. Seek must be called before accessing data
         Iterator(uint32_t valueSize, BaseDiskArrayInternal& diskArray,

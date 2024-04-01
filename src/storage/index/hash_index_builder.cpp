@@ -302,19 +302,6 @@ std::string HashIndexBuilder<T>::toString() {
     return result;
 }
 
-template class HashIndexBuilder<int64_t>;
-template class HashIndexBuilder<int32_t>;
-template class HashIndexBuilder<int16_t>;
-template class HashIndexBuilder<int8_t>;
-template class HashIndexBuilder<uint64_t>;
-template class HashIndexBuilder<uint32_t>;
-template class HashIndexBuilder<uint16_t>;
-template class HashIndexBuilder<uint8_t>;
-template class HashIndexBuilder<double>;
-template class HashIndexBuilder<float>;
-template class HashIndexBuilder<int128_t>;
-template class HashIndexBuilder<ku_string_t>;
-
 template<typename T>
 void HashIndexBuilder<T>::createEmptyIndexFiles(uint64_t indexPos, FileHandle& fileHandle) {
     InMemDiskArrayBuilder<HashIndexHeader> headerArray(fileHandle,
@@ -332,6 +319,19 @@ void HashIndexBuilder<T>::createEmptyIndexFiles(uint64_t indexPos, FileHandle& f
     pSlots.saveToDisk();
     oSlots.saveToDisk();
 }
+
+template class HashIndexBuilder<int64_t>;
+template class HashIndexBuilder<int32_t>;
+template class HashIndexBuilder<int16_t>;
+template class HashIndexBuilder<int8_t>;
+template class HashIndexBuilder<uint64_t>;
+template class HashIndexBuilder<uint32_t>;
+template class HashIndexBuilder<uint16_t>;
+template class HashIndexBuilder<uint8_t>;
+template class HashIndexBuilder<double>;
+template class HashIndexBuilder<float>;
+template class HashIndexBuilder<int128_t>;
+template class HashIndexBuilder<ku_string_t>;
 
 } // namespace storage
 } // namespace kuzu

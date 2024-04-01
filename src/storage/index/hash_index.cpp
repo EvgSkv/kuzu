@@ -141,11 +141,10 @@ bool HashIndex<T>::lookupInternal(Transaction* transaction, Key key, offset_t& r
     } else {
         KU_ASSERT(transaction->isWriteTransaction());
         auto localLookupState = localStorage->lookup(key, result);
-        if (localLookupState == HashIndexLocalLookupState::KEY_FOUND) {
-            return true;
-        } else if (localLookupState == HashIndexLocalLookupState::KEY_DELETED) {
+        if (localLookupState == HashIndexLocalLookupState::KEY_DELETED) {
             return false;
-        } else if (bulkInsertLocalStorage.lookup(key, result)) {
+        } else if (localLookupState == HashIndexLocalLookupState::KEY_FOUND ||
+                   bulkInsertLocalStorage.lookup(key, result)) {
             return true;
         } else {
             KU_ASSERT(localLookupState == HashIndexLocalLookupState::KEY_NOT_EXIST);
@@ -426,7 +425,7 @@ void HashIndex<T>::reserve(uint64_t newEntries) {
     // Can be no fewer slots that the current level requires
     auto numRequiredSlots =
         std::max((numRequiredEntries + getSlotCapacity<T>() - 1) / getSlotCapacity<T>(),
-            1ul << this->indexHeaderForWriteTrx->currentLevel);
+            static_cast<slot_id_t>(1ul << this->indexHeaderForWriteTrx->currentLevel));
     // If there are no entries, we can just re-size the number of primary slots and re-calculate the
     // levels
     if (this->indexHeaderForWriteTrx->numEntries == 0) {

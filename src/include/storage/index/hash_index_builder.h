@@ -3,7 +3,6 @@
 #include <memory>
 
 #include "common/static_vector.h"
-#include "common/type_utils.h"
 #include "common/types/internal_id_t.h"
 #include "common/types/ku_string.h"
 #include "common/types/types.h"
