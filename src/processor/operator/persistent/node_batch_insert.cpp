@@ -177,15 +177,20 @@ void NodeBatchInsert::finalize(ExecutionContext* context) {
         ku_dynamic_cast<BatchInsertSharedState*, NodeBatchInsertSharedState*>(sharedState.get());
     nodeSharedState->calculateNumTuples();
     nodeSharedState->updateNumTuplesForTable();
+    auto nodeTable = ku_dynamic_cast<Table*, NodeTable*>(nodeSharedState->table);
     if (nodeSharedState->sharedNodeGroup) {
         auto nodeGroupIdx = nodeSharedState->getNextNodeGroupIdx();
-        auto nodeTable = ku_dynamic_cast<Table*, NodeTable*>(nodeSharedState->table);
         NodeBatchInsert::writeAndResetNodeGroup(nodeGroupIdx, nodeSharedState->globalIndexBuilder,
             nodeSharedState->pkColumnIdx, nodeTable, nodeSharedState->sharedNodeGroup.get());
     }
     if (nodeSharedState->globalIndexBuilder) {
         nodeSharedState->globalIndexBuilder->finalize(context);
     }
+    auto catalogEntry = context->clientContext->getCatalog()->getTableCatalogEntry(
+        context->clientContext->getTx(), sharedState->table->getTableID());
+    auto nodeTableEntry = ku_dynamic_cast<TableCatalogEntry*, NodeTableCatalogEntry*>(catalogEntry);
+    nodeTable->initializePKIndex(
+        nodeTableEntry, false /* readOnly */, context->clientContext->getVFSUnsafe());
     auto outputMsg = stringFormat("{} number of tuples has been copied to table: {}.",
         sharedState->getNumRows(), info->tableEntry->getName());
     FactorizedTableUtils::appendStringToTable(

@@ -56,7 +56,7 @@ void CatalogSet::createEntry(Transaction* transaction, std::unique_ptr<CatalogEn
     emplace(std::move(entry));
     KU_ASSERT(transaction);
     if (transaction->getStartTS() > 0) {
-        KU_ASSERT(transaction->getID() != common::INVALID_TRANSACTION);
+        KU_ASSERT(transaction->getID() != 0);
         transaction->addCatalogEntry(this, entryPtr->getPrev());
     }
 }
@@ -108,7 +108,7 @@ void CatalogSet::dropEntry(Transaction* transaction, const std::string& name) {
     auto tombstonePtr = tombstone.get();
     emplace(std::move(tombstone));
     if (transaction->getStartTS() > 0) {
-        KU_ASSERT(transaction->getID() != INVALID_TRANSACTION);
+        KU_ASSERT(transaction->getID() != 0);
         transaction->addCatalogEntry(this, tombstonePtr->getPrev());
     }
 }
@@ -131,7 +131,7 @@ void CatalogSet::alterEntry(Transaction* transaction, const binder::BoundAlterIn
         emplace(std::move(newEntry));
     }
     if (transaction->getStartTS() > 0) {
-        KU_ASSERT(transaction->getID() != INVALID_TRANSACTION);
+        KU_ASSERT(transaction->getID() != 0);
         transaction->addCatalogEntry(this, entry);
     }
 }

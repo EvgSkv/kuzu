@@ -38,7 +38,7 @@ public:
     }
 
     constexpr explicit Transaction(TransactionType transactionType) noexcept
-        : type{transactionType}, ID{INVALID_TRANSACTION_ID}, startTS{0} {}
+        : type{transactionType}, ID{0}, startTS{0} {}
 
 public:
     inline TransactionType getType() const { return type; }
