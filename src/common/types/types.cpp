@@ -738,8 +738,74 @@ uint32_t LogicalTypeUtils::getRowLayoutSize(const LogicalType& type) {
     }
 }
 
+bool LogicalTypeUtils::isDate(const LogicalType& dataType) {
+    return isDate(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isDate(const LogicalTypeID& dataType) {
+    return dataType == LogicalTypeID::DATE;
+}
+
+bool LogicalTypeUtils::isTimestamp(const LogicalType& dataType) {
+    return isTimestamp(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isTimestamp(const LogicalTypeID& dataType) {
+    switch (dataType) {
+    case LogicalTypeID::TIMESTAMP:
+    case LogicalTypeID::TIMESTAMP_SEC:
+    case LogicalTypeID::TIMESTAMP_MS:
+    case LogicalTypeID::TIMESTAMP_NS:
+        return true;
+    default:
+    return false;
+    }
+}
+
+bool LogicalTypeUtils::isUnsigned(const LogicalType& dataType) {
+    return isUnsigned(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isUnsigned(const LogicalTypeID& dataType) {
+    switch (dataType) {
+    case LogicalTypeID::UINT64:
+    case LogicalTypeID::UINT32:
+    case LogicalTypeID::UINT16:
+    case LogicalTypeID::UINT8:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool LogicalTypeUtils::isIntegral(const LogicalType& dataType) {
+    return isIntegral(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isIntegral(const LogicalTypeID& dataType) {
+    switch (dataType) {
+    case LogicalTypeID::INT64:
+    case LogicalTypeID::INT32:
+    case LogicalTypeID::INT16:
+    case LogicalTypeID::INT8:
+    case LogicalTypeID::UINT64:
+    case LogicalTypeID::UINT32:
+    case LogicalTypeID::UINT16:
+    case LogicalTypeID::UINT8:
+    case LogicalTypeID::INT128:
+    case LogicalTypeID::SERIAL:
+        return true;
+    default:
+        return false;
+    }
+}
+
 bool LogicalTypeUtils::isNumerical(const LogicalType& dataType) {
-    switch (dataType.typeID) {
+    return isNumerical(dataType.typeID);
+}
+
+bool LogicalTypeUtils::isNumerical(const LogicalTypeID& dataType) {
+    switch (dataType) {
     case LogicalTypeID::INT64:
     case LogicalTypeID::INT32:
     case LogicalTypeID::INT16:
@@ -956,6 +1022,354 @@ std::unique_ptr<LogicalType> LogicalType::ARRAY(
     std::unique_ptr<LogicalType> childType, uint64_t numElements) {
     return std::unique_ptr<LogicalType>(new LogicalType(
         LogicalTypeID::ARRAY, std::make_unique<ArrayTypeInfo>(std::move(childType), numElements)));
+}
+
+static LogicalTypeID joinToWiderType(
+    const LogicalTypeID& left, const LogicalTypeID& right) {
+    if (PhysicalTypeUtils::getFixedTypeSize(LogicalType::getPhysicalType(left))
+        > PhysicalTypeUtils::getFixedTypeSize(LogicalType::getPhysicalType(right))) {
+        return left;
+    } else {
+        return right;
+    }
+}
+
+// lower number will cast to higher number
+static int32_t timestampPlace(const LogicalTypeID& timestamp) {
+    switch (timestamp) {
+    case LogicalTypeID::TIMESTAMP_NS:
+        return 0;
+    case LogicalTypeID::TIMESTAMP:
+        return 1;
+    case LogicalTypeID::TIMESTAMP_MS:
+        return 2;
+    case LogicalTypeID::TIMESTAMP_SEC:
+        return 3;
+    default:
+        // LCOV_EXCL_START
+        KU_UNREACHABLE;
+        // LCOV_EXCL_END
+    }
+}
+
+static LogicalTypeID joinToWiderTimestamp(
+    const LogicalTypeID& left, const LogicalTypeID& right) {
+    if (timestampPlace(left) < timestampPlace(right)) {
+        return right;
+    } else {
+        return left;
+    }
+}
+
+static bool tryUnsignedToSigned(const LogicalTypeID& input, LogicalTypeID& result) {
+    switch (input) {
+    case LogicalTypeID::UINT8:
+        result = LogicalTypeID::INT16;
+        break;
+    case LogicalTypeID::UINT16:
+        result = LogicalTypeID::INT32;
+        break;
+    case LogicalTypeID::UINT32:
+        result = LogicalTypeID::INT64;
+        break;
+    case LogicalTypeID::UINT64:
+        result = LogicalTypeID::INT128;
+        break;
+    default:
+        return false;
+    }
+    return true;
+}
+
+static LogicalTypeID joinDifferentSignIntegrals(
+    const LogicalTypeID& signedType, const LogicalTypeID& unsignedType) {
+    LogicalTypeID unsignedToSigned;
+    if (!tryUnsignedToSigned(unsignedType, unsignedToSigned)) {
+        return LogicalTypeID::DOUBLE;
+    } else {
+        return joinToWiderType(signedType, unsignedToSigned);
+    }
+}
+
+/*
+cannot take nested types
+the values returned by this function must create the following order
+1. any
+2. unsigneds
+3. signeds
+4. floating points
+5. date
+6. timestamp
+7. uncastables
+8. string
+*/
+static uint32_t internalTypeOrder(const LogicalTypeID& type) {
+    switch (type) {
+    case LogicalTypeID::ANY:
+        return 0;
+    case LogicalTypeID::UINT8:
+    case LogicalTypeID::UINT16:
+    case LogicalTypeID::UINT32:
+    case LogicalTypeID::UINT64:
+        return 4;
+    case LogicalTypeID::INT8:
+    case LogicalTypeID::INT16:
+    case LogicalTypeID::INT32:
+    case LogicalTypeID::INT64:
+    case LogicalTypeID::INT128:
+    case LogicalTypeID::SERIAL:
+        return 9;
+    case LogicalTypeID::FLOAT:
+    case LogicalTypeID::DOUBLE:
+        return 11;
+    case LogicalTypeID::DATE:
+        return 12;
+    case LogicalTypeID::TIMESTAMP_NS:
+    case LogicalTypeID::TIMESTAMP_MS:
+    case LogicalTypeID::TIMESTAMP:
+    case LogicalTypeID::TIMESTAMP_SEC:
+        return 13;
+    case LogicalTypeID::TIMESTAMP_TZ:
+    case LogicalTypeID::INTERVAL:
+        return 14;
+    case LogicalTypeID::STRING:
+        return 15;
+    default:
+        // LCOV_EXCL_START
+        KU_UNREACHABLE;
+        // LCOV_EXCL_END
+    }
+}
+
+bool LogicalTypeUtils::tryGetMaxLogicalTypeID(
+    const LogicalTypeID& left, const LogicalTypeID& right, LogicalTypeID& result) {
+    KU_ASSERT(!isNested(left));
+    KU_ASSERT(!isNested(right));
+    if (left == right) {
+        result = left;
+        return true;
+    } else if (internalTypeOrder(left) > internalTypeOrder(right)) {
+        return tryGetMaxLogicalTypeID(right, left, result);
+    } else if (right == LogicalTypeID::STRING) {
+        result = left; // special case
+        return true;
+    } else if (isUnsigned(left)) {
+        if (isUnsigned(right)) {
+            result = joinToWiderType(left, right);
+            return true;
+        } else if (isIntegral(right)) {
+            result = joinDifferentSignIntegrals(right, left);
+            return true;
+        } else if (isNumerical(right)) {
+            result = right;
+            return true;
+        }
+    } else if (isIntegral(left)) {
+        if (isIntegral(right)) {
+            result = joinToWiderType(left, right);
+            return true;
+        } else if (isNumerical(right)) {
+            result = right;
+            return true;
+        }
+    } else if (isNumerical(left)) {
+        if (isNumerical(right)) {
+            result = joinToWiderType(left, right);
+            return true;
+        }
+    } else if (isDate(left)) {
+        if (isTimestamp(right)) {
+            result = right;
+            return true;
+        }
+    } else if (isTimestamp(left)) {
+        if (isTimestamp(right)) {
+            result = joinToWiderTimestamp(left, right);
+            return true;
+        }
+    }
+    return false;
+}
+
+// if we can combine the child types, then we can combine the list
+static bool tryCombineVarListTypes(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    LogicalType childType;
+    if (!LogicalTypeUtils::tryGetMaxLogicalType(
+        *VarListType::getChildType(&left), *VarListType::getChildType(&right), childType)) {
+        return false;
+    }
+    result = *LogicalType::VAR_LIST(childType);
+    return true;
+}
+
+static bool tryCombineArrayTypes(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    if (ArrayType::getNumElements(&left) != ArrayType::getNumElements(&right)) {
+        return tryCombineVarListTypes(left, right, result);
+    }
+    LogicalType childType;
+    if (!LogicalTypeUtils::tryGetMaxLogicalType(
+        *ArrayType::getChildType(&left), *ArrayType::getChildType(&right), childType)) {
+        return false;
+    }
+    result = *LogicalType::ARRAY(childType, ArrayType::getNumElements(&left));
+    return true;
+}
+
+// if we can match child labels and combine their types, then we can combine
+// the struct
+static bool tryCombineStructTypes(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    auto leftFields = StructType::getFields(&left),
+         rightFields = StructType::getFields(&right);
+    if (leftFields.size() != rightFields.size()) {
+        return false;
+    }
+    auto comp = [](const StructField* const& a, const StructField* const& b) -> bool {
+        return a->getName() < b->getName();
+    };
+    std::sort(leftFields.begin(), leftFields.end(), comp);
+    std::sort(rightFields.begin(), rightFields.end(), comp);
+    std::vector<StructField> newFields;
+    for (auto i = 0u; i < leftFields.size(); i++) {
+        if (leftFields[i]->getName() != rightFields[i]->getName()) {
+            return false;
+        }
+        LogicalType combinedType;
+        if (!LogicalTypeUtils::tryGetMaxLogicalType(
+            *leftFields[i]->getType(), *rightFields[i]->getType(), combinedType)) {
+            newFields.push_back(StructField(leftFields[i]->getName(),
+                std::make_unique<LogicalType>(combinedType)));
+        }
+    }
+    result = *LogicalType::STRUCT(std::move(newFields));
+    return true;
+}
+
+// if we can combine the key and value, then we cna combine the map
+static bool tryCombineMapTypes(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    auto leftKeyType = *MapType::getKeyType(&left);
+    auto leftValueType = *MapType::getValueType(&left);
+    auto rightKeyType = *MapType::getKeyType(&right);
+    auto rightValueType = *MapType::getValueType(&right);
+    LogicalType resultKeyType, resultValueType;
+    if (!LogicalTypeUtils::tryGetMaxLogicalType(leftKeyType, rightKeyType, resultKeyType) ||
+        !LogicalTypeUtils::tryGetMaxLogicalType(leftValueType, rightValueType, resultValueType)) {
+        return false;
+    }
+    result = *LogicalType::MAP(std::make_unique<LogicalType>(resultKeyType),
+                               std::make_unique<LogicalType>(resultValueType));
+    return true;
+}
+
+// if one of the unions labels is a subset of the other labels, and we can
+// combine corresponding labels, then we can combine the union
+static bool tryCombineUnionTypes(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    auto leftFields = StructType::getFields(&left),
+         rightFields = StructType::getFields(&right);
+    if (leftFields.size() > rightFields.size()) {
+        std::swap(leftFields, rightFields);
+    }
+    auto comp = [](const StructField* const& a, const StructField* const& b) -> bool {
+        return a->getName() < b->getName();
+    };
+    std::sort(leftFields.begin(), leftFields.end(), comp);
+    std::sort(rightFields.begin(), rightFields.end(), comp);
+    std::vector<StructField> newFields;
+    for (auto i = 0u, j = 0u; i < leftFields.size(); i++) {
+        if (leftFields[i]->getName() == UnionType::TAG_FIELD_NAME) {
+            continue;
+        }
+        while (j < rightFields.size() && leftFields[i]->getName() != rightFields[j]->getName()) {
+            j++;
+        }
+        if (j == rightFields.size()) {
+            return false;
+        }
+        LogicalType combinedType;
+        if (!LogicalTypeUtils::tryGetMaxLogicalType(
+            *leftFields[i]->getType(), *rightFields[j]->getType(), combinedType)) {
+            newFields.push_back(StructField(leftFields[i]->getName(),
+                std::make_unique<LogicalType>(combinedType)));
+        }
+    }
+    result = *LogicalType::UNION(std::move(newFields));
+    return true;
+}
+
+bool LogicalTypeUtils::tryGetMaxLogicalType(
+    const LogicalType& left, const LogicalType& right, LogicalType& result) {
+    if (isNested(left) || isNested(right)) {
+        if (!isNested(left) || !isNested(right)) {
+            return false;
+        } else {
+            LogicalTypeID resultID;
+            if (tryGetMaxLogicalTypeID(left.typeID, right.typeID, resultID)) {
+                result = LogicalType(resultID);
+                return true;
+            } else {
+                return false;
+            }
+        }
+    } else {
+        switch(left.typeID) {
+        case LogicalTypeID::VAR_LIST:
+            if (right.typeID != LogicalTypeID::VAR_LIST &&
+                right.typeID != LogicalTypeID::ARRAY) {
+                return false;
+            }
+            return tryCombineVarListTypes(left, right, result);
+        case LogicalTypeID::ARRAY:
+            if (right.typeID == LogicalTypeID::VAR_LIST) {
+                return tryCombineVarListTypes(left, right, result);
+            } else if (right.typeID == LogicalTypeID::ARRAY) {
+                return tryCombineArrayTypes(left, right, result);
+            } else {
+                return false;
+            }
+        case LogicalTypeID::STRUCT:
+            if (right.typeID != left.typeID) {
+                return false;
+            }
+            return tryCombineStructTypes(left, right, result);
+        case LogicalTypeID::MAP:
+            if (right.typeID != left.typeID) {
+                return false;
+            }
+            return tryCombineMapTypes(left, right, result);
+        case LogicalTypeID::UNION:
+            if (right.typeID != left.typeID) {
+                return false;
+            }
+            return tryCombineUnionTypes(left, right, result);
+        default:
+            // LCOV_EXCL_START
+            KU_UNREACHABLE;
+            // LCOV_EXCL_END
+        }
+    }
+}
+
+LogicalTypeID LogicalTypeUtils::getMaxLogicalTypeID(
+    const LogicalTypeID& left, const LogicalTypeID& right) {
+    LogicalTypeID result;
+    if (!tryGetMaxLogicalTypeID(left, right, result)) {
+        throw common::BinderException(stringFormat("Cannot combine logical types {} and {}",
+                                                   toString(left), toString(right)));
+    }
+    return result;
+}
+
+LogicalType LogicalTypeUtils::getMaxLogicalType(
+    const LogicalType& left, const LogicalType& right) {
+    LogicalType result;
+    if (!tryGetMaxLogicalType(left, right, result)) {
+        throw common::BinderException(stringFormat("Cannot combine logical types {} and {}",
+                                                   toString(left.typeID), toString(right.typeID)));
+    }
 }
 
 } // namespace common
