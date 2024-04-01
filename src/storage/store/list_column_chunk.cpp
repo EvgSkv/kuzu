@@ -34,7 +34,8 @@ ListColumnChunk::ListColumnChunk(
         ColumnChunkFactory::createColumnChunk(*ListType::getChildType(&this->dataType)->copy(),
             enableCompression, 0 /* capacity */, inMemory));
     checkOffsetSortedAsc = false;
-    KU_ASSERT(this->dataType.getPhysicalType() == PhysicalTypeID::LIST);
+    KU_ASSERT(this->dataType.getPhysicalType() == PhysicalTypeID::LIST ||
+              this->dataType.getPhysicalType() == PhysicalTypeID::ARRAY);
 }
 
 bool ListColumnChunk::isOffsetsConsecutiveAndSortedAscending(
@@ -231,7 +232,8 @@ void ListColumnChunk::write(ValueVector* vector, offset_t offsetInVector, offset
 
 void ListColumnChunk::write(ColumnChunk* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
-    KU_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::LIST);
+    KU_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::LIST ||
+              srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::ARRAY);
     checkOffsetSortedAsc = true;
     auto srcListChunk = ku_dynamic_cast<ColumnChunk*, ListColumnChunk*>(srcChunk);
     auto offsetInDataChunkToAppend = listDataColumnChunk->getNumValues();
@@ -258,7 +260,8 @@ void ListColumnChunk::write(ColumnChunk* srcChunk, offset_t srcOffsetInChunk,
 
 void ListColumnChunk::copy(ColumnChunk* srcChunk, offset_t srcOffsetInChunk,
     offset_t dstOffsetInChunk, offset_t numValuesToCopy) {
-    KU_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::LIST);
+    KU_ASSERT(srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::LIST ||
+              srcChunk->getDataType().getPhysicalType() == PhysicalTypeID::ARRAY);
     KU_ASSERT(dstOffsetInChunk >= numValues);
     while (numValues < dstOffsetInChunk) {
         appendNullList();
